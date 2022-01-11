@@ -85,11 +85,32 @@ MNIST.download(i_accept_the_terms_of_use=true)
 # ╔═╡ c15bc190-f8fc-40c3-a56e-956632475813
 begin
 	x_train, y_train = MNIST.traindata()
-	size(x_train), size(y_train)
+	y_train_oh = Flux.onehotbatch(y_train, 0:9)
+	size(x_train), size(y_train), size(y_train_oh)
 end
 
 # ╔═╡ 6116ec01-fbdb-4970-9db4-cfe10b9e8b12
 [(Gray.(x_train[:,:,it]'), y_train[it]) for it in 1:10]
+
+# ╔═╡ a250eb8f-ce7d-4932-a965-f29a6c246826
+## from https://github.com/ansh941/MnistSimpleCNN/blob/master/code/models/modelM7.py
+mnistSimpleCNN7 = Flux.Chain(
+	Flux.unsqueeze(3),
+	Flux.Conv((7,7), 1=>48, bias=false), # output becomes 22x22
+	Flux.BatchNorm(48, Flux.relu),
+	Flux.Conv((7,7), 48=>96, bias=false), # output becomes 16x16
+	Flux.BatchNorm(96, Flux.relu),
+	Flux.Conv((7,7), 96=>144, bias=false), # output becomes 10x10
+	Flux.BatchNorm(144, Flux.relu),
+	Flux.Conv((7,7), 144=>192, bias=false), # output becomes 4x4
+	Flux.BatchNorm(192, Flux.relu),
+	Flux.flatten, # results in 4x4x192=3072 dimensions
+	Flux.Dense(3072, 10, bias=false),
+	Flux.BatchNorm(10)
+)
+
+# ╔═╡ 54f31864-f15a-4ad3-a295-e658a8d9eacb
+mnistSimpleCNN7(x_train[:,:,1:4])
 
 # ╔═╡ 71ff019a-1b0d-477a-b65c-b120d24bb65c
 md"# Benchmarking"
@@ -1481,6 +1502,8 @@ version = "0.9.1+5"
 # ╠═05322a5e-adf0-4c40-a0e5-d979f830a19d
 # ╠═c15bc190-f8fc-40c3-a56e-956632475813
 # ╠═6116ec01-fbdb-4970-9db4-cfe10b9e8b12
+# ╟─a250eb8f-ce7d-4932-a965-f29a6c246826
+# ╠═54f31864-f15a-4ad3-a295-e658a8d9eacb
 # ╟─71ff019a-1b0d-477a-b65c-b120d24bb65c
 # ╟─055ac9a0-d9fd-47cb-b330-0ccdde6eac45
 # ╠═417583de-d711-4ce3-b303-c60af090da9b
