@@ -20,8 +20,9 @@ begin
 	using Flux: params, gradient, Flux
 	using PlutoUI: Slider, bind
 	using Plots: plot, plot!
-	using LinearAlgebra: diagm
+	using LinearAlgebra: diagm, norm
 	using Zygote: Zygote
+	using DataFrames: DataFrame
 end
 
 # ╔═╡ 4b551b29-9a69-4468-b8d6-3bb185a7c4b8
@@ -57,6 +58,14 @@ A = V'* D * V
 # ╔═╡ 1339f49c-d60c-4da6-b57a-1874308b5f45
 f(x) = x'*A*x
 
+# ╔═╡ 3361f048-07b3-4d4f-96a7-d662c0ca398c
+begin
+	x = [1., 1.]
+	loss() = f(x)
+	ps=params(x)
+	gradient(loss, ps)[x]
+end
+
 # ╔═╡ 633d6874-f5d8-4f2b-8c77-80d1358dd910
 function Flux.Optimise.update!(
 	opt::Flux.Optimise.AbstractOptimiser, ps::Zygote.Params, loss::Function
@@ -78,6 +87,19 @@ begin
 	DirNewton() = DirNewton(0.1, 0.1)
 end
 
+# ╔═╡ 055ac9a0-d9fd-47cb-b330-0ccdde6eac45
+optimisers = Dict(
+	"GD" => Flux.Optimise.Descent(),
+	"Momentum" => Momentum(),
+	"Nesterov Momentum" => Nesterov(),
+	"optimal Momentum" => Nesterov(
+		1/ubound, 
+		(1-sqrt(inv_condition))/(1+sqrt(inv_condition))
+	),
+	"ADAM" => ADAM(),
+	"DirNewton" => DirNewton()
+)
+
 # ╔═╡ 6d9aaedc-5990-46ea-9e8d-0e1ab9b2c7a5
 function Flux.Optimise.update!(opt::DirNewton, ps::Zygote.Params, loss::Function)
 	grad = Flux.gradient(loss, ps)
@@ -85,9 +107,10 @@ function Flux.Optimise.update!(opt::DirNewton, ps::Zygote.Params, loss::Function
 	for p in ps
 		update!(p, opt.learning_rate * grad[p])
 	end
+	grad_norm_sq = sum([sum(g.^2) for g in grad])
 	loss_delta = loss() - prev_loss
-	d_estimate = 2/opt.learning_rate *(1+ loss_delta/(opt.learning_rate*sum(grad.^2)))
-	opt.learning_rate = 1/((1-ddecay)/opt.learning_rate + opt.ddecay * d_estimate)
+	d_estimate = 2/opt.learning_rate *(1+ loss_delta/(opt.learning_rate*grad_norm_sq))
+	opt.learning_rate = 1/((1-opt.ddecay)/opt.learning_rate + opt.ddecay * d_estimate)
 end
 
 # ╔═╡ ea558847-2fcc-43dc-85de-1ee532786c25
@@ -95,34 +118,17 @@ function parabola_test(optimizer)
 	x = [1., 1.]
 	loss() = f(x)
 	ps = params(x)
-	for it in 1:1000
+	for it in 1:100
 		update!(optimizer, ps, loss)
 	end
-	return ps
+	return norm(ps)
 end
 
-# ╔═╡ ded6eac1-e713-44a5-a8e9-5633cb9d5b9f
-parabola_test(Flux.Optimise.Descent())
-
-# ╔═╡ 49020d3e-342c-4a19-9942-e9591ed58f66
-parabola_test(Momentum())
-
-# ╔═╡ 5f6964ca-6ac0-480b-adbb-7bdca1c33770
-parabola_test(Nesterov())
-
-# ╔═╡ 5e39618f-6d47-4fe1-8488-484e8976b7cf
-parabola_test(ADAM())
-
-# ╔═╡ 4ea5271f-8376-44d4-a46e-51ed7af39dcc
-parabola_test(DirNewton())
-
-# ╔═╡ 3361f048-07b3-4d4f-96a7-d662c0ca398c
-begin
-	x = [1., 1.]
-	loss() = f(x)
-	ps=params(x)
-	update!(Momentum(), ps, loss)
-end
+# ╔═╡ 417583de-d711-4ce3-b303-c60af090da9b
+DataFrame(
+	optimiser= collect(keys(optimisers)), 
+	error= parabola_test.(values(optimisers))
+)
 
 # ╔═╡ 531c3d16-5288-47d6-966c-4ed506276ddc
 methods(update!)
@@ -130,6 +136,7 @@ methods(update!)
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
@@ -137,6 +144,7 @@ PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [compat]
+DataFrames = "~1.3.1"
 Flux = "~0.12.8"
 Plots = "~1.25.4"
 PlutoUI = "~0.7.29"
@@ -281,10 +289,21 @@ git-tree-sha1 = "9f02045d934dc030edad45944ea80dbd1f0ebea7"
 uuid = "d38c429a-6771-53c6-b99e-75d170b6e991"
 version = "0.5.7"
 
+[[deps.Crayons]]
+git-tree-sha1 = "b618084b49e78985ffa8422f32b9838e397b9fc2"
+uuid = "a8cc5b0e-0ffa-5ad4-8c14-923d3ee1735f"
+version = "4.1.0"
+
 [[deps.DataAPI]]
 git-tree-sha1 = "cc70b17275652eb47bc9e5f81635981f13cea5c8"
 uuid = "9a962f9c-6df0-11e9-0e5d-c546b8b5ee8a"
 version = "1.9.0"
+
+[[deps.DataFrames]]
+deps = ["Compat", "DataAPI", "Future", "InvertedIndices", "IteratorInterfaceExtensions", "LinearAlgebra", "Markdown", "Missings", "PooledArrays", "PrettyTables", "Printf", "REPL", "Reexport", "SortingAlgorithms", "Statistics", "TableTraits", "Tables", "Unicode"]
+git-tree-sha1 = "cfdfef912b7f93e4b848e80b9befdf9e331bc05a"
+uuid = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+version = "1.3.1"
 
 [[deps.DataStructures]]
 deps = ["Compat", "InteractiveUtils", "OrderedCollections"]
@@ -413,6 +432,10 @@ git-tree-sha1 = "e4768c3b7f597d5a352afa09874d16e3c3f6ead2"
 uuid = "d9f16b24-f501-4c13-a1f2-28368ffc5196"
 version = "0.2.7"
 
+[[deps.Future]]
+deps = ["Random"]
+uuid = "9fa8497b-333b-5362-9e8d-4d0656e87820"
+
 [[deps.GLFW_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Libglvnd_jll", "Pkg", "Xorg_libXcursor_jll", "Xorg_libXi_jll", "Xorg_libXinerama_jll", "Xorg_libXrandr_jll"]
 git-tree-sha1 = "0c603255764a1fa0b61752d2bec14cfbd18f7fe8"
@@ -527,6 +550,11 @@ deps = ["Test"]
 git-tree-sha1 = "a7254c0acd8e62f1ac75ad24d5db43f5f19f3c65"
 uuid = "3587e190-3f89-42d0-90ee-14403ec27112"
 version = "0.1.2"
+
+[[deps.InvertedIndices]]
+git-tree-sha1 = "bee5f1ef5bf65df56bdd2e40447590b272a5471f"
+uuid = "41ab1584-1d38-5bbf-9106-f11c6c58b48f"
+version = "1.1.0"
 
 [[deps.IrrationalConstants]]
 git-tree-sha1 = "7fd44fd4ff43fc60815f8e764c0f352b83c49151"
@@ -832,11 +860,23 @@ git-tree-sha1 = "7711172ace7c40dc8449b7aed9d2d6f1cf56a5bd"
 uuid = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 version = "0.7.29"
 
+[[deps.PooledArrays]]
+deps = ["DataAPI", "Future"]
+git-tree-sha1 = "db3a23166af8aebf4db5ef87ac5b00d36eb771e2"
+uuid = "2dfb63ee-cc39-5dd5-95bd-886bf059d720"
+version = "1.4.0"
+
 [[deps.Preferences]]
 deps = ["TOML"]
 git-tree-sha1 = "2cf929d64681236a2e074ffafb8d568733d2e6af"
 uuid = "21216c6a-2e73-6563-6e65-726566657250"
 version = "1.2.3"
+
+[[deps.PrettyTables]]
+deps = ["Crayons", "Formatting", "Markdown", "Reexport", "Tables"]
+git-tree-sha1 = "dfb54c4e414caa595a1f2ed759b160f5a3ddcba5"
+uuid = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
+version = "1.3.1"
 
 [[deps.Printf]]
 deps = ["Unicode"]
@@ -1271,16 +1311,13 @@ version = "0.9.1+5"
 # ╠═4b551b29-9a69-4468-b8d6-3bb185a7c4b8
 # ╟─7c99ba74-7bee-49a1-a374-93683d69756a
 # ╟─82289a5a-2c4c-4fe3-82a5-414a4ef0b30a
-# ╠═4e053d2d-087f-489c-89b6-6b953aeca405
 # ╠═58282877-00a5-4f6b-8845-bc31e002eabe
 # ╠═a3c97837-c1df-4929-9bab-edc80a3e9ee4
 # ╠═1339f49c-d60c-4da6-b57a-1874308b5f45
 # ╠═ea558847-2fcc-43dc-85de-1ee532786c25
-# ╠═ded6eac1-e713-44a5-a8e9-5633cb9d5b9f
-# ╠═49020d3e-342c-4a19-9942-e9591ed58f66
-# ╠═5f6964ca-6ac0-480b-adbb-7bdca1c33770
-# ╠═5e39618f-6d47-4fe1-8488-484e8976b7cf
-# ╠═4ea5271f-8376-44d4-a46e-51ed7af39dcc
+# ╠═4e053d2d-087f-489c-89b6-6b953aeca405
+# ╟─055ac9a0-d9fd-47cb-b330-0ccdde6eac45
+# ╠═417583de-d711-4ce3-b303-c60af090da9b
 # ╠═3361f048-07b3-4d4f-96a7-d662c0ca398c
 # ╠═633d6874-f5d8-4f2b-8c77-80d1358dd910
 # ╠═531c3d16-5288-47d6-966c-4ed506276ddc
