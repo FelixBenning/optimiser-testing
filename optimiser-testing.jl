@@ -29,6 +29,7 @@ end
 begin
 	using MLDatasets: MNIST
 	using Colors: Gray
+	using Base.Iterators: partition
 end
 
 # ╔═╡ 2734f935-de10-4431-89fc-5a8a6a80359f
@@ -112,12 +113,21 @@ mnistSimpleCNN7 = Flux.Chain(
 # ╔═╡ 54f31864-f15a-4ad3-a295-e658a8d9eacb
 mnistSimpleCNN7(x_train[:,:,1:4])
 
+# ╔═╡ 9e612ca6-dc59-47bc-8540-1bcbc93b2839
+a=[
+	1 2 3 5
+	3 4 0 0
+]
+
+# ╔═╡ a478396d-e501-4422-a940-8267abee0ded
+collect(partition(a, 3))
+
 # ╔═╡ 71ff019a-1b0d-477a-b65c-b120d24bb65c
 md"# Benchmarking"
 
 # ╔═╡ 633d6874-f5d8-4f2b-8c77-80d1358dd910
 function step!(
-	opt::Flux.Optimise.AbstractOptimiser, ps::Zygote.Params, loss::Function
+	loss::Function, opt::Flux.Optimise.AbstractOptimiser, ps::Zygote.Params
 )
 	grad = Flux.gradient(ps) do
 		loss()
@@ -153,7 +163,7 @@ optimisers = Dict(
 )
 
 # ╔═╡ 6d9aaedc-5990-46ea-9e8d-0e1ab9b2c7a5
-function step!(opt::DirNewton, ps::Zygote.Params, loss::Function)
+function step!(loss::Function, opt::DirNewton, ps::Zygote.Params)
 	grad = Flux.gradient(loss, ps)
 	prev_loss = loss()
 	for p in ps
@@ -173,7 +183,7 @@ function parabola_test(optimizer)
 	record = Array{Float64, 2}(undef, 2, iterations+1)
 	for it in 1:iterations
 		record[:,it] = copy(x)
-		step!(optimizer, ps, loss)
+		step!(loss, optimizer, ps)
 	end
 	record[:, iterations+1] = copy(x)
 	return Dict(:error=>norm(ps), :path=>record)
@@ -185,13 +195,16 @@ DataFrame(
 	error= getindex.(parabola_test.(values(optimisers)), :error)
 )
 
-# ╔═╡ 3361f048-07b3-4d4f-96a7-d662c0ca398c
+# ╔═╡ f93ea45e-cf94-437f-88d7-75f758871f98
 begin
-	x = [1., 1.]
-	loss() = f(x)
-	ps=params(x)
-	step!(DirNewton(), ps, loss)
-	x
+	CNN7_params = params()
+	batchsize=1
+	iters=1
+	for it in 1:iters
+		step!(ADAM(), CNN7_params) do 
+			#loss
+		end
+	end
 end
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
@@ -1504,10 +1517,12 @@ version = "0.9.1+5"
 # ╠═6116ec01-fbdb-4970-9db4-cfe10b9e8b12
 # ╟─a250eb8f-ce7d-4932-a965-f29a6c246826
 # ╠═54f31864-f15a-4ad3-a295-e658a8d9eacb
+# ╠═f93ea45e-cf94-437f-88d7-75f758871f98
+# ╠═9e612ca6-dc59-47bc-8540-1bcbc93b2839
+# ╠═a478396d-e501-4422-a940-8267abee0ded
 # ╟─71ff019a-1b0d-477a-b65c-b120d24bb65c
 # ╟─055ac9a0-d9fd-47cb-b330-0ccdde6eac45
 # ╠═417583de-d711-4ce3-b303-c60af090da9b
-# ╠═3361f048-07b3-4d4f-96a7-d662c0ca398c
 # ╠═633d6874-f5d8-4f2b-8c77-80d1358dd910
 # ╟─e1f65800-d3ef-401d-987c-a0da594267fb
 # ╠═6d9aaedc-5990-46ea-9e8d-0e1ab9b2c7a5
