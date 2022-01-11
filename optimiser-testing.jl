@@ -25,6 +25,12 @@ begin
 	using DataFrames: DataFrame
 end
 
+# ╔═╡ 9a050fd0-5dab-4883-9c97-75aed0f0c44b
+begin
+	using MLDatasets: MNIST
+	using Colors: Gray
+end
+
 # ╔═╡ 2734f935-de10-4431-89fc-5a8a6a80359f
 md"# Parabola Test"
 
@@ -38,13 +44,8 @@ V = [
 	-sin(θ) cos(θ)
 ]
 
-# ╔═╡ 82289a5a-2c4c-4fe3-82a5-414a4ef0b30a
-begin
-	v1 = hcat([0,0], V[:,1])
-	v2 = hcat([0,0], V[:,2])
-	p = plot(v1[1,:], v1[2,:], arrow=true, label="V[:,1]")
-	plot!(p, v2[1,:], v2[2,:], arrow=true, ylim=(-1,1), xlim=(-1,1), label="V[:,2]")
-end
+# ╔═╡ 762db423-ffcf-4bf6-b329-ee621e3f9391
+f(x...) = f([v for v in x])
 
 # ╔═╡ 4e053d2d-087f-489c-89b6-6b953aeca405
 @bind inv_condition Slider(0.01:0.01:1, default=1, show_value=true)
@@ -57,21 +58,41 @@ begin
 end
 
 # ╔═╡ a3c97837-c1df-4929-9bab-edc80a3e9ee4
-A = V'* D * V
+A = V * D * V'
 
 # ╔═╡ 1339f49c-d60c-4da6-b57a-1874308b5f45
 f(x) = x'*A*x
 
+# ╔═╡ cd6b8e15-5f81-4229-a1ad-0239a25f43b1
+
+begin
+	p= plot(-3:0.03:3, -2:0.03:2, f, st=:contour, aspect_ratio=1)
+	v1 = hcat([0,0], V[:,1])
+	v2 = hcat([0,0], V[:,2])
+	plot!(p, v1[1,:], v1[2,:], arrow=true, label="V[:,1]")
+	plot!(p, v2[1,:], v2[2,:], arrow=true, label="V[:,2]")
+end
+
+# ╔═╡ b8472070-cb2d-4662-ba85-2c57d0cff92d
+@bind iterations Slider(10:10:1000, default=100, show_value=true)
+
+# ╔═╡ c89d0b1a-4a5f-469e-b609-108a9257034c
+md"# MNIST Test"
+
+# ╔═╡ 05322a5e-adf0-4c40-a0e5-d979f830a19d
+MNIST.download(i_accept_the_terms_of_use=true)
+
+# ╔═╡ c15bc190-f8fc-40c3-a56e-956632475813
+begin
+	x_train, y_train = MNIST.traindata()
+	size(x_train), size(y_train)
+end
+
+# ╔═╡ 6116ec01-fbdb-4970-9db4-cfe10b9e8b12
+[(Gray.(x_train[:,:,it]'), y_train[it]) for it in 1:10]
+
 # ╔═╡ 71ff019a-1b0d-477a-b65c-b120d24bb65c
 md"# Benchmarking"
-
-# ╔═╡ 3361f048-07b3-4d4f-96a7-d662c0ca398c
-begin
-	x = [1., 1.]
-	loss() = f(x)
-	ps=params(x)
-	gradient(loss, ps)[x]
-end
 
 # ╔═╡ 633d6874-f5d8-4f2b-8c77-80d1358dd910
 function step!(
@@ -128,31 +149,47 @@ function parabola_test(optimizer)
 	x = [1., 1.]
 	loss() = f(x)
 	ps = params(x)
-	for it in 1:100
+	record = Array{Float64, 2}(undef, 2, iterations+1)
+	for it in 1:iterations
+		record[:,it] = copy(x)
 		step!(optimizer, ps, loss)
 	end
-	return norm(ps)
+	record[:, iterations+1] = copy(x)
+	return Dict(:error=>norm(ps), :path=>record)
 end
 
 # ╔═╡ 417583de-d711-4ce3-b303-c60af090da9b
 DataFrame(
 	optimiser= collect(keys(optimisers)), 
-	error= parabola_test.(values(optimisers))
+	error= getindex.(parabola_test.(values(optimisers)), :error)
 )
+
+# ╔═╡ 3361f048-07b3-4d4f-96a7-d662c0ca398c
+begin
+	x = [1., 1.]
+	loss() = f(x)
+	ps=params(x)
+	step!(DirNewton(), ps, loss)
+	x
+end
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
+Colors = "5ae59095-9a9b-59fe-a467-6f913c188581"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+MLDatasets = "eb30cadb-4394-5ae3-aed4-317e484a6458"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [compat]
+Colors = "~0.12.8"
 DataFrames = "~1.3.1"
 Flux = "~0.12.8"
+MLDatasets = "~0.5.14"
 Plots = "~1.25.4"
 PlutoUI = "~0.7.29"
 Zygote = "~0.6.33"
@@ -208,6 +245,36 @@ version = "0.2.0"
 
 [[deps.Base64]]
 uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
+
+[[deps.BinDeps]]
+deps = ["Libdl", "Pkg", "SHA", "URIParser", "Unicode"]
+git-tree-sha1 = "1289b57e8cf019aede076edab0587eb9644175bd"
+uuid = "9e28174c-4ba2-5203-b857-d8d62c4213ee"
+version = "1.0.2"
+
+[[deps.BinaryProvider]]
+deps = ["Libdl", "Logging", "SHA"]
+git-tree-sha1 = "ecdec412a9abc8db54c0efc5548c64dfce072058"
+uuid = "b99e7846-7c00-51b0-8f62-c81ae34c0232"
+version = "0.5.10"
+
+[[deps.Blosc]]
+deps = ["Blosc_jll"]
+git-tree-sha1 = "575bdd70552dd9a7eaeba08ef2533226cdc50779"
+uuid = "a74b3585-a348-5f62-a45c-50e91977d574"
+version = "0.7.2"
+
+[[deps.Blosc_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Lz4_jll", "Pkg", "Zlib_jll", "Zstd_jll"]
+git-tree-sha1 = "91d6baa911283650df649d0aea7c28639273ae7b"
+uuid = "0b7ba130-8d10-5ba8-a3d6-c5182647fed9"
+version = "1.21.1+0"
+
+[[deps.BufferedStreams]]
+deps = ["Compat", "Test"]
+git-tree-sha1 = "5d55b9486590fdda5905c275bb21ce1f0754020f"
+uuid = "e1450e63-4bb3-523b-b2a4-4ffa8c0fd77d"
+version = "1.0.0"
 
 [[deps.Bzip2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -305,6 +372,12 @@ version = "4.1.0"
 git-tree-sha1 = "cc70b17275652eb47bc9e5f81635981f13cea5c8"
 uuid = "9a962f9c-6df0-11e9-0e5d-c546b8b5ee8a"
 version = "1.9.0"
+
+[[deps.DataDeps]]
+deps = ["BinaryProvider", "HTTP", "Libdl", "Reexport", "SHA", "p7zip_jll"]
+git-tree-sha1 = "4f0e41ff461d42cfc62ff0de4f1cd44c6e6b3771"
+uuid = "124859b0-ceae-595e-8997-d05f6a7a8dfe"
+version = "0.7.7"
 
 [[deps.DataFrames]]
 deps = ["Compat", "DataAPI", "Future", "InvertedIndices", "IteratorInterfaceExtensions", "LinearAlgebra", "Markdown", "Missings", "PooledArrays", "PrettyTables", "Printf", "REPL", "Reexport", "SortingAlgorithms", "Statistics", "TableTraits", "Tables", "Unicode"]
@@ -473,6 +546,12 @@ git-tree-sha1 = "f97acd98255568c3c9b416c5a3cf246c1315771b"
 uuid = "d2c73de3-f751-5644-a686-071e5b155ba9"
 version = "0.63.0+0"
 
+[[deps.GZip]]
+deps = ["Libdl"]
+git-tree-sha1 = "039be665faf0b8ae36e089cd694233f5dee3f7d6"
+uuid = "92fee26a-97fe-5a0c-ad85-20a5f3185b63"
+version = "0.5.1"
+
 [[deps.GeometryBasics]]
 deps = ["EarCut_jll", "IterTools", "LinearAlgebra", "StaticArrays", "StructArrays", "Tables"]
 git-tree-sha1 = "58bcdf5ebc057b085e58d95c138725628dd7453c"
@@ -501,6 +580,18 @@ version = "1.3.14+0"
 git-tree-sha1 = "53bb909d1151e57e2484c3d1b53e19552b887fb2"
 uuid = "42e2da0e-8278-4e71-bc24-59509adca0fe"
 version = "1.0.2"
+
+[[deps.HDF5]]
+deps = ["Blosc", "Compat", "HDF5_jll", "Libdl", "Mmap", "Random", "Requires"]
+git-tree-sha1 = "698c099c6613d7b7f151832868728f426abe698b"
+uuid = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
+version = "0.15.7"
+
+[[deps.HDF5_jll]]
+deps = ["Artifacts", "JLLWrappers", "LibCURL_jll", "Libdl", "OpenSSL_jll", "Pkg", "Zlib_jll"]
+git-tree-sha1 = "bab67c0d1c4662d2c4be8c6007751b0b6111de5c"
+uuid = "0234f1f7-429e-5d53-9886-15a909be8d59"
+version = "1.12.1+0"
 
 [[deps.HTTP]]
 deps = ["Base64", "Dates", "IniFile", "Logging", "MbedTLS", "NetworkOptions", "Sockets", "URIs"]
@@ -552,6 +643,12 @@ version = "0.5.0"
 deps = ["Markdown"]
 uuid = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
 
+[[deps.InternedStrings]]
+deps = ["Random", "Test"]
+git-tree-sha1 = "eb05b5625bc5d821b8075a77e4c421933e20c76b"
+uuid = "7d512f48-7fb1-5a58-b986-67e6dc259f01"
+version = "0.7.0"
+
 [[deps.InverseFunctions]]
 deps = ["Test"]
 git-tree-sha1 = "a7254c0acd8e62f1ac75ad24d5db43f5f19f3c65"
@@ -589,6 +686,12 @@ deps = ["Dates", "Mmap", "Parsers", "Unicode"]
 git-tree-sha1 = "8076680b162ada2a031f707ac7b4953e30667a37"
 uuid = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 version = "0.21.2"
+
+[[deps.JSON3]]
+deps = ["Dates", "Mmap", "Parsers", "StructTypes", "UUIDs"]
+git-tree-sha1 = "7d58534ffb62cd947950b3aa9b993e63307a6125"
+uuid = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
+version = "1.9.2"
 
 [[deps.JpegTurbo_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -721,6 +824,24 @@ version = "0.3.6"
 [[deps.Logging]]
 uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
 
+[[deps.Lz4_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "5d494bc6e85c4c9b626ee0cab05daa4085486ab1"
+uuid = "5ced341a-0733-55b8-9ab6-a4889d929147"
+version = "1.9.3+0"
+
+[[deps.MAT]]
+deps = ["BufferedStreams", "CodecZlib", "HDF5", "SparseArrays"]
+git-tree-sha1 = "37d418e2f20f0fcdc78214f763f1066b74ca1e1b"
+uuid = "23992714-dd62-5051-b70f-ba57cb901cac"
+version = "0.10.2"
+
+[[deps.MLDatasets]]
+deps = ["BinDeps", "ColorTypes", "DataDeps", "DelimitedFiles", "FixedPointNumbers", "GZip", "JSON3", "MAT", "Pickle", "Requires", "SparseArrays"]
+git-tree-sha1 = "a456fdf6f33a9e63a8aca76ed6feb13c2999f166"
+uuid = "eb30cadb-4394-5ae3-aed4-317e484a6458"
+version = "0.5.14"
+
 [[deps.MacroTools]]
 deps = ["Markdown", "Random"]
 git-tree-sha1 = "3d3e902b31198a27340d0bf00d6ac452866021cf"
@@ -832,6 +953,12 @@ deps = ["Dates"]
 git-tree-sha1 = "d7fa6237da8004be601e19bd6666083056649918"
 uuid = "69de0a69-1ddd-5017-9359-2bf0b02dc9f0"
 version = "2.1.3"
+
+[[deps.Pickle]]
+deps = ["DataStructures", "InternedStrings", "Serialization", "SparseArrays", "Strided", "ZipFile"]
+git-tree-sha1 = "b4054944f1bfb956fb38fb54ee760e33c5507d35"
+uuid = "fbb45041-c46e-462f-888f-7c521cafbc2c"
+version = "0.2.10"
 
 [[deps.Pixman_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1015,11 +1142,23 @@ git-tree-sha1 = "51383f2d367eb3b444c961d485c565e4c0cf4ba0"
 uuid = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 version = "0.33.14"
 
+[[deps.Strided]]
+deps = ["LinearAlgebra", "TupleTools"]
+git-tree-sha1 = "4d581938087ca90eab9bd4bb6d270edaefd70dcd"
+uuid = "5e0ebb24-38b0-5f93-81fe-25c709ecae67"
+version = "1.1.2"
+
 [[deps.StructArrays]]
 deps = ["Adapt", "DataAPI", "StaticArrays", "Tables"]
 git-tree-sha1 = "2ce41e0d042c60ecd131e9fb7154a3bfadbf50d3"
 uuid = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
 version = "0.6.3"
+
+[[deps.StructTypes]]
+deps = ["Dates", "UUIDs"]
+git-tree-sha1 = "d24a825a95a6d98c385001212dc9020d609f2d4f"
+uuid = "856f2bd8-1eba-4b0a-8007-ebc267875bd4"
+version = "1.8.1"
 
 [[deps.TOML]]
 deps = ["Dates"]
@@ -1056,6 +1195,17 @@ deps = ["Random", "Test"]
 git-tree-sha1 = "216b95ea110b5972db65aa90f88d8d89dcb8851c"
 uuid = "3bb67fe8-82b1-5028-8e26-92a6c54297fa"
 version = "0.9.6"
+
+[[deps.TupleTools]]
+git-tree-sha1 = "3c712976c47707ff893cf6ba4354aa14db1d8938"
+uuid = "9d95972d-f1c8-5527-a6e0-b4b365fa01f6"
+version = "1.3.0"
+
+[[deps.URIParser]]
+deps = ["Unicode"]
+git-tree-sha1 = "53a9f49546b8d2dd2e688d216421d050c9a31d0d"
+uuid = "30578b45-9adc-5946-b283-645ec420af67"
+version = "0.4.1"
 
 [[deps.URIs]]
 git-tree-sha1 = "97bbe755a53fe859669cd907f2d96aee8d2c1355"
@@ -1320,10 +1470,17 @@ version = "0.9.1+5"
 # ╟─7c99ba74-7bee-49a1-a374-93683d69756a
 # ╟─58282877-00a5-4f6b-8845-bc31e002eabe
 # ╠═a3c97837-c1df-4929-9bab-edc80a3e9ee4
-# ╟─82289a5a-2c4c-4fe3-82a5-414a4ef0b30a
 # ╠═1339f49c-d60c-4da6-b57a-1874308b5f45
+# ╟─762db423-ffcf-4bf6-b329-ee621e3f9391
+# ╠═cd6b8e15-5f81-4229-a1ad-0239a25f43b1
 # ╠═ea558847-2fcc-43dc-85de-1ee532786c25
 # ╠═4e053d2d-087f-489c-89b6-6b953aeca405
+# ╠═b8472070-cb2d-4662-ba85-2c57d0cff92d
+# ╟─c89d0b1a-4a5f-469e-b609-108a9257034c
+# ╠═9a050fd0-5dab-4883-9c97-75aed0f0c44b
+# ╠═05322a5e-adf0-4c40-a0e5-d979f830a19d
+# ╠═c15bc190-f8fc-40c3-a56e-956632475813
+# ╠═6116ec01-fbdb-4970-9db4-cfe10b9e8b12
 # ╟─71ff019a-1b0d-477a-b65c-b120d24bb65c
 # ╟─055ac9a0-d9fd-47cb-b330-0ccdde6eac45
 # ╠═417583de-d711-4ce3-b303-c60af090da9b
