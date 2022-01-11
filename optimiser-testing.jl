@@ -25,8 +25,12 @@ begin
 	using DataFrames: DataFrame
 end
 
+# ╔═╡ 2734f935-de10-4431-89fc-5a8a6a80359f
+md"# Parabola Test"
+
 # ╔═╡ 4b551b29-9a69-4468-b8d6-3bb185a7c4b8
-@bind θ Slider(0:0.01:2*π, default=1, show_value=true)
+md"θ
+$(@bind θ Slider(0:0.01:2*π, default=1, show_value=true))"
 
 # ╔═╡ 7c99ba74-7bee-49a1-a374-93683d69756a
 V = [
@@ -58,6 +62,9 @@ A = V'* D * V
 # ╔═╡ 1339f49c-d60c-4da6-b57a-1874308b5f45
 f(x) = x'*A*x
 
+# ╔═╡ 71ff019a-1b0d-477a-b65c-b120d24bb65c
+md"# Benchmarking"
+
 # ╔═╡ 3361f048-07b3-4d4f-96a7-d662c0ca398c
 begin
 	x = [1., 1.]
@@ -67,7 +74,7 @@ begin
 end
 
 # ╔═╡ 633d6874-f5d8-4f2b-8c77-80d1358dd910
-function Flux.Optimise.update!(
+function step!(
 	opt::Flux.Optimise.AbstractOptimiser, ps::Zygote.Params, loss::Function
 )
 	grad = Flux.gradient(ps) do
@@ -77,6 +84,9 @@ function Flux.Optimise.update!(
 		update!(opt, p, grad[p])
 	end
 end
+
+# ╔═╡ e1f65800-d3ef-401d-987c-a0da594267fb
+md"# Directional Newton"
 
 # ╔═╡ c1fe3adf-3347-424b-b4b9-583b7f404abf
 begin
@@ -101,7 +111,7 @@ optimisers = Dict(
 )
 
 # ╔═╡ 6d9aaedc-5990-46ea-9e8d-0e1ab9b2c7a5
-function Flux.Optimise.update!(opt::DirNewton, ps::Zygote.Params, loss::Function)
+function step!(opt::DirNewton, ps::Zygote.Params, loss::Function)
 	grad = Flux.gradient(loss, ps)
 	prev_loss = loss()
 	for p in ps
@@ -119,7 +129,7 @@ function parabola_test(optimizer)
 	loss() = f(x)
 	ps = params(x)
 	for it in 1:100
-		update!(optimizer, ps, loss)
+		step!(optimizer, ps, loss)
 	end
 	return norm(ps)
 end
@@ -129,9 +139,6 @@ DataFrame(
 	optimiser= collect(keys(optimisers)), 
 	error= parabola_test.(values(optimisers))
 )
-
-# ╔═╡ 531c3d16-5288-47d6-966c-4ed506276ddc
-methods(update!)
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -1308,19 +1315,21 @@ version = "0.9.1+5"
 
 # ╔═╡ Cell order:
 # ╠═d9c98afe-6fcf-11ec-305b-638215690c33
-# ╠═4b551b29-9a69-4468-b8d6-3bb185a7c4b8
+# ╟─2734f935-de10-4431-89fc-5a8a6a80359f
+# ╟─4b551b29-9a69-4468-b8d6-3bb185a7c4b8
 # ╟─7c99ba74-7bee-49a1-a374-93683d69756a
-# ╟─82289a5a-2c4c-4fe3-82a5-414a4ef0b30a
-# ╠═58282877-00a5-4f6b-8845-bc31e002eabe
+# ╟─58282877-00a5-4f6b-8845-bc31e002eabe
 # ╠═a3c97837-c1df-4929-9bab-edc80a3e9ee4
+# ╟─82289a5a-2c4c-4fe3-82a5-414a4ef0b30a
 # ╠═1339f49c-d60c-4da6-b57a-1874308b5f45
 # ╠═ea558847-2fcc-43dc-85de-1ee532786c25
 # ╠═4e053d2d-087f-489c-89b6-6b953aeca405
+# ╟─71ff019a-1b0d-477a-b65c-b120d24bb65c
 # ╟─055ac9a0-d9fd-47cb-b330-0ccdde6eac45
 # ╠═417583de-d711-4ce3-b303-c60af090da9b
 # ╠═3361f048-07b3-4d4f-96a7-d662c0ca398c
 # ╠═633d6874-f5d8-4f2b-8c77-80d1358dd910
-# ╠═531c3d16-5288-47d6-966c-4ed506276ddc
+# ╟─e1f65800-d3ef-401d-987c-a0da594267fb
 # ╠═6d9aaedc-5990-46ea-9e8d-0e1ab9b2c7a5
 # ╠═c1fe3adf-3347-424b-b4b9-583b7f404abf
 # ╟─00000000-0000-0000-0000-000000000001
