@@ -86,6 +86,7 @@ MNIST.download(i_accept_the_terms_of_use=true)
 # ╔═╡ c15bc190-f8fc-40c3-a56e-956632475813
 begin
 	x_train, y_train = MNIST.traindata()
+	x_train = Float32.(x_train)[:,:,1:1000]
 	y_train_oh = Flux.onehotbatch(y_train, 0:9)
 	size(x_train), size(y_train), size(y_train_oh)
 end
@@ -111,7 +112,15 @@ mnistSimpleCNN7 = Flux.Chain(
 )
 
 # ╔═╡ 54f31864-f15a-4ad3-a295-e658a8d9eacb
-mnistSimpleCNN7(x_train[:,:,1:4])
+g = eachslice(mnistSimpleCNN7(x_train[:,:,1:4]), dims=2), y_train[1:4]
+
+# ╔═╡ 8cafe755-5aec-4aa4-aa65-3e71b1ca85f8
+map(g...) do pr, l
+	pr
+end
+
+# ╔═╡ 079c0a71-0f52-451d-ac3c-a4a6d9cf910b
+length(collect(partition(1:size(x_train, ndims(x_train)), 1))[1])
 
 # ╔═╡ 9e612ca6-dc59-47bc-8540-1bcbc93b2839
 a=[
@@ -120,7 +129,9 @@ a=[
 ]
 
 # ╔═╡ a478396d-e501-4422-a940-8267abee0ded
-collect(partition(a, 3))
+map(eachslice(a, dims=ndims(a)), (0:3).%2) do x, y
+	x[y+1]
+end
 
 # ╔═╡ 71ff019a-1b0d-477a-b65c-b120d24bb65c
 md"# Benchmarking"
@@ -200,9 +211,17 @@ begin
 	CNN7_params = params()
 	batchsize=1
 	iters=1
-	for it in 1:iters
+	for samples in partition(1:size(x_train, ndims(x_train)), batchsize)
 		step!(ADAM(), CNN7_params) do 
-			#loss
+			pred = mnistSimpleCNN7(x_train[:,:,samples])
+			#@assert size(pred) == (10, length(samples))
+			# summed negative log likelihood loss
+			return map(
+				eachslice(pred, dims=ndims(pred)), 
+				y_train[samples]
+			) do single_prediction_log_dist, label
+				-single_prediction_log_dist[label+1] # neg log probabability of label
+			end |> sum
 		end
 	end
 end
@@ -1515,9 +1534,11 @@ version = "0.9.1+5"
 # ╠═05322a5e-adf0-4c40-a0e5-d979f830a19d
 # ╠═c15bc190-f8fc-40c3-a56e-956632475813
 # ╠═6116ec01-fbdb-4970-9db4-cfe10b9e8b12
-# ╟─a250eb8f-ce7d-4932-a965-f29a6c246826
+# ╠═a250eb8f-ce7d-4932-a965-f29a6c246826
 # ╠═54f31864-f15a-4ad3-a295-e658a8d9eacb
+# ╠═8cafe755-5aec-4aa4-aa65-3e71b1ca85f8
 # ╠═f93ea45e-cf94-437f-88d7-75f758871f98
+# ╠═079c0a71-0f52-451d-ac3c-a4a6d9cf910b
 # ╠═9e612ca6-dc59-47bc-8540-1bcbc93b2839
 # ╠═a478396d-e501-4422-a940-8267abee0ded
 # ╟─71ff019a-1b0d-477a-b65c-b120d24bb65c
