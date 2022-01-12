@@ -94,6 +94,25 @@ end
 # ╔═╡ 6116ec01-fbdb-4970-9db4-cfe10b9e8b12
 [(Gray.(x_train[:,:,it]'), y_train[it]) for it in 1:10]
 
+# ╔═╡ 8020b0a1-7204-4269-bf4e-be8be4afc0b5
+# 2c2d from DeepOBS
+c2d2 = Flux.Chain(
+	Flux.unsqueeze(3),
+	Flux.Conv(
+		(5,5), 1=>32, Flux.relu,
+		pad=Flux.SamePad(), bias=repeat([0.05], 32), init=(x...)->0.05*randn(x...)
+	),
+	Flux.MaxPool((2,2),pad=Flux.SamePad()),
+	Flux.Conv(
+		(5,5), 32=>64, Flux.relu,
+		pad=Flux.SamePad(), bias=repeat([0.05], 64), init=(x...)->0.05*randn(x...)
+	),
+	Flux.MaxPool((2,2),pad=Flux.SamePad()),
+	Flux.flatten,
+	Flux.Dense(7*7*64, 1024, Flux.relu),
+	Flux.Dense(1024, 10)	
+)
+
 # ╔═╡ a250eb8f-ce7d-4932-a965-f29a6c246826
 ## from https://github.com/ansh941/MnistSimpleCNN/blob/master/code/models/modelM7.py
 mnistSimpleCNN7 = Flux.Chain(
@@ -1513,6 +1532,7 @@ version = "0.9.1+5"
 # ╠═05322a5e-adf0-4c40-a0e5-d979f830a19d
 # ╠═c15bc190-f8fc-40c3-a56e-956632475813
 # ╠═6116ec01-fbdb-4970-9db4-cfe10b9e8b12
+# ╟─8020b0a1-7204-4269-bf4e-be8be4afc0b5
 # ╟─a250eb8f-ce7d-4932-a965-f29a6c246826
 # ╠═f93ea45e-cf94-437f-88d7-75f758871f98
 # ╠═882f695c-3fa2-4a0a-aff6-e4828f3d996e
