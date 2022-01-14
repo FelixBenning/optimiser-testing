@@ -130,6 +130,13 @@ mnistSimpleCNN7 = Flux.Chain(
 	Flux.BatchNorm(10)
 )
 
+# ╔═╡ b0c6c53c-d295-4897-ac7a-5b36f04d021a
+function negative_log_likelihood_loss(predictions, labels)
+	return map(eachslice(predictions, dims=ndims(predictions)), labels) do pred, label
+		-pred[label+1] # assuming labels are 0:n, pred is a distribution over labels
+	end |> sum
+end
+
 # ╔═╡ 71ff019a-1b0d-477a-b65c-b120d24bb65c
 md"# Benchmarking"
 
@@ -209,14 +216,7 @@ function train!(model, x_train, y_train; batchsize=1, epochs=1)
 	for samples in partition(1:size(x_train, ndims(x_train)), batchsize)
 		step!(ADAM(), ps) do 
 			pred = model(x_train[:,:,samples])
-			#@assert size(pred) == (10, length(samples))
-			# summed negative log likelihood loss
-			return map(
-				eachslice(pred, dims=ndims(pred)), 
-				y_train[samples]
-			) do single_prediction_log_dist, label
-				-single_prediction_log_dist[label+1] # neg log probabability of label
-			end |> sum
+			return negative_log_likelihood_loss(pred, y_train[samples])
 		end
 	end
 end
@@ -1534,6 +1534,7 @@ version = "0.9.1+5"
 # ╠═6116ec01-fbdb-4970-9db4-cfe10b9e8b12
 # ╟─8020b0a1-7204-4269-bf4e-be8be4afc0b5
 # ╟─a250eb8f-ce7d-4932-a965-f29a6c246826
+# ╠═b0c6c53c-d295-4897-ac7a-5b36f04d021a
 # ╠═f93ea45e-cf94-437f-88d7-75f758871f98
 # ╠═882f695c-3fa2-4a0a-aff6-e4828f3d996e
 # ╟─71ff019a-1b0d-477a-b65c-b120d24bb65c
