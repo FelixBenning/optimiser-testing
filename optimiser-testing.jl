@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.17.5
+# v0.19.5
 
 using Markdown
 using InteractiveUtils
@@ -30,6 +30,7 @@ begin
 	using MLDatasets: MNIST
 	using Colors: Gray
 	using Base.Iterators: partition
+	using LinearAlgebra: dot
 end
 
 # ╔═╡ 2734f935-de10-4431-89fc-5a8a6a80359f
@@ -45,11 +46,8 @@ V = [
 	-sin(θ) cos(θ)
 ]
 
-# ╔═╡ 762db423-ffcf-4bf6-b329-ee621e3f9391
-f(x...) = f([v for v in x])
-
 # ╔═╡ 4e053d2d-087f-489c-89b6-6b953aeca405
-@bind inv_condition Slider(0.01:0.01:1, default=1, show_value=true)
+@bind inv_condition Slider(0.01:0.01:1, default=0.6, show_value=true)
 
 # ╔═╡ 58282877-00a5-4f6b-8845-bc31e002eabe
 begin
@@ -63,6 +61,9 @@ A = V * D * V'
 
 # ╔═╡ 1339f49c-d60c-4da6-b57a-1874308b5f45
 f(x) = x'*A*x
+
+# ╔═╡ 762db423-ffcf-4bf6-b329-ee621e3f9391
+f(x...) = f([v for v in x])
 
 # ╔═╡ cd6b8e15-5f81-4229-a1ad-0239a25f43b1
 
@@ -132,10 +133,17 @@ mnistSimpleCNN7 = Flux.Chain(
 
 # ╔═╡ b0c6c53c-d295-4897-ac7a-5b36f04d021a
 function negative_log_likelihood_loss(predictions, labels)
-	return map(eachslice(predictions, dims=ndims(predictions)), labels) do pred, label
-		-pred[label+1] # assuming labels are 0:n, pred is a distribution over labels
-	end |> sum
+	return sum(-predictions.*labels)
 end
+
+# ╔═╡ 9110ccca-37a4-41b5-ae0a-a1148899862d
+negative_log_likelihood_loss(mnistSimpleCNN7(x_train[:,:,1:1]), y_train[1:1])
+
+# ╔═╡ 0fb4c254-933e-4d59-b596-fec7b8fb3fce
+size(mnistSimpleCNN7(x_train[:,:,1:1]))
+
+# ╔═╡ 2c73ea1b-389d-4abd-a1f5-e80db0c1b377
+Flux.params(mnistSimpleCNN7)
 
 # ╔═╡ 71ff019a-1b0d-477a-b65c-b120d24bb65c
 md"# Benchmarking"
@@ -144,12 +152,8 @@ md"# Benchmarking"
 function step!(
 	loss::Function, opt::Flux.Optimise.AbstractOptimiser, ps::Zygote.Params
 )
-	grad = Flux.gradient(ps) do
-		loss()
-	end
-	for p in ps
-		update!(opt, p, grad[p])
-	end
+	grad = Flux.gradient(loss, ps)
+	update!(opt, ps, grad)
 end
 
 # ╔═╡ e1f65800-d3ef-401d-987c-a0da594267fb
@@ -169,7 +173,7 @@ optimisers = Dict(
 	"GD" => Flux.Optimise.Descent(),
 	"Momentum" => Momentum(),
 	"Nesterov Momentum" => Nesterov(),
-	"optimal Momentum" => Nesterov(
+	"optimal Momentum" => Momentum(
 		1/ubound, 
 		(1-sqrt(inv_condition))/(1+sqrt(inv_condition))
 	),
@@ -211,18 +215,15 @@ DataFrame(
 )
 
 # ╔═╡ f93ea45e-cf94-437f-88d7-75f758871f98
-function train!(model, x_train, y_train; batchsize=1, epochs=1)
+function train!(model, x_train, labels; batchsize=1, epochs=1)
 	ps = params(model)
 	for samples in partition(1:size(x_train, ndims(x_train)), batchsize)
 		step!(ADAM(), ps) do 
 			pred = model(x_train[:,:,samples])
-			return negative_log_likelihood_loss(pred, y_train[samples])
+			return negative_log_likelihood_loss(pred, labels[:,samples])
 		end
 	end
 end
-
-# ╔═╡ 882f695c-3fa2-4a0a-aff6-e4828f3d996e
-train!(mnistSimpleCNN7, x_train[:,:,1:100], y_train)
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -762,6 +763,12 @@ git-tree-sha1 = "f6250b16881adf048549549fba48b1161acdac8c"
 uuid = "c1c5ebd0-6772-5130-a774-d5fcae4a789d"
 version = "3.100.1+0"
 
+[[deps.LERC_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "bf36f528eec6634efc60d7ec062008f171071434"
+uuid = "88015f11-f218-50d7-93a8-a6af411a945d"
+version = "3.0.0+1"
+
 [[deps.LLVM]]
 deps = ["CEnum", "LLVMExtra_jll", "Libdl", "Printf", "Unicode"]
 git-tree-sha1 = "7cc22e69995e2329cc047a879395b2b74647ab5f"
@@ -770,9 +777,9 @@ version = "4.7.0"
 
 [[deps.LLVMExtra_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "62115afed394c016c2d3096c5b85c407b48be96b"
+git-tree-sha1 = "67cc5406b15bd04ff72a45f628bec61d36078908"
 uuid = "dad2f222-ce93-54a1-a47d-0025e8a3acab"
-version = "0.0.13+1"
+version = "0.0.13+3"
 
 [[deps.LZO_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -851,10 +858,10 @@ uuid = "4b2f31a3-9ecc-558c-b454-b3730dcb73e9"
 version = "2.35.0+0"
 
 [[deps.Libtiff_jll]]
-deps = ["Artifacts", "JLLWrappers", "JpegTurbo_jll", "Libdl", "Pkg", "Zlib_jll", "Zstd_jll"]
-git-tree-sha1 = "340e257aada13f95f98ee352d316c3bed37c8ab9"
+deps = ["Artifacts", "JLLWrappers", "JpegTurbo_jll", "LERC_jll", "Libdl", "Pkg", "Zlib_jll", "Zstd_jll"]
+git-tree-sha1 = "c9551dd26e31ab17b86cbd00c2ede019c08758eb"
 uuid = "89763e89-9b03-5906-acba-b20f662cd828"
-version = "4.3.0+0"
+version = "4.3.0+1"
 
 [[deps.Libuuid_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1073,9 +1080,9 @@ uuid = "9abbd945-dff8-562f-b5e8-e1ebf5ef1b79"
 
 [[deps.Qt5Base_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Fontconfig_jll", "Glib_jll", "JLLWrappers", "Libdl", "Libglvnd_jll", "OpenSSL_jll", "Pkg", "Xorg_libXext_jll", "Xorg_libxcb_jll", "Xorg_xcb_util_image_jll", "Xorg_xcb_util_keysyms_jll", "Xorg_xcb_util_renderutil_jll", "Xorg_xcb_util_wm_jll", "Zlib_jll", "xkbcommon_jll"]
-git-tree-sha1 = "ad368663a5e20dbb8d6dc2fddeefe4dae0781ae8"
+git-tree-sha1 = "c6c0f690d0cc7caddb74cef7aa847b824a16b256"
 uuid = "ea2cea3b-5b76-57ae-a6ef-0a8af62496e1"
-version = "5.15.3+0"
+version = "5.15.3+1"
 
 [[deps.REPL]]
 deps = ["InteractiveUtils", "Markdown", "Sockets", "Unicode"]
@@ -1483,9 +1490,9 @@ version = "1.6.38+0"
 
 [[deps.libvorbis_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Ogg_jll", "Pkg"]
-git-tree-sha1 = "c45f4e40e7aafe9d086379e5578947ec8b95a8fb"
+git-tree-sha1 = "b910cb81ef3fe6e78bf6acee440bda86fd6ae00c"
 uuid = "f27f6e37-5d2b-51aa-960f-b287f2bc3b7a"
-version = "1.3.7+0"
+version = "1.3.7+1"
 
 [[deps.nghttp2_jll]]
 deps = ["Artifacts", "Libdl"]
@@ -1521,11 +1528,11 @@ version = "0.9.1+5"
 # ╟─7c99ba74-7bee-49a1-a374-93683d69756a
 # ╟─58282877-00a5-4f6b-8845-bc31e002eabe
 # ╠═a3c97837-c1df-4929-9bab-edc80a3e9ee4
+# ╠═4e053d2d-087f-489c-89b6-6b953aeca405
 # ╠═1339f49c-d60c-4da6-b57a-1874308b5f45
 # ╟─762db423-ffcf-4bf6-b329-ee621e3f9391
-# ╠═cd6b8e15-5f81-4229-a1ad-0239a25f43b1
+# ╟─cd6b8e15-5f81-4229-a1ad-0239a25f43b1
 # ╠═ea558847-2fcc-43dc-85de-1ee532786c25
-# ╠═4e053d2d-087f-489c-89b6-6b953aeca405
 # ╠═b8472070-cb2d-4662-ba85-2c57d0cff92d
 # ╟─c89d0b1a-4a5f-469e-b609-108a9257034c
 # ╠═9a050fd0-5dab-4883-9c97-75aed0f0c44b
@@ -1536,9 +1543,11 @@ version = "0.9.1+5"
 # ╟─a250eb8f-ce7d-4932-a965-f29a6c246826
 # ╠═b0c6c53c-d295-4897-ac7a-5b36f04d021a
 # ╠═f93ea45e-cf94-437f-88d7-75f758871f98
-# ╠═882f695c-3fa2-4a0a-aff6-e4828f3d996e
+# ╠═9110ccca-37a4-41b5-ae0a-a1148899862d
+# ╠═0fb4c254-933e-4d59-b596-fec7b8fb3fce
+# ╠═2c73ea1b-389d-4abd-a1f5-e80db0c1b377
 # ╟─71ff019a-1b0d-477a-b65c-b120d24bb65c
-# ╟─055ac9a0-d9fd-47cb-b330-0ccdde6eac45
+# ╠═055ac9a0-d9fd-47cb-b330-0ccdde6eac45
 # ╠═417583de-d711-4ce3-b303-c60af090da9b
 # ╠═633d6874-f5d8-4f2b-8c77-80d1358dd910
 # ╟─e1f65800-d3ef-401d-987c-a0da594267fb
