@@ -4,16 +4,6 @@
 using Markdown
 using InteractiveUtils
 
-# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
-macro bind(def, element)
-    quote
-        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
-        local el = $(esc(element))
-        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
-        el
-    end
-end
-
 # ╔═╡ 6fb3abe0-db63-11ec-3d8b-696b950d494b
 begin
 	using Zygote: Zygote
@@ -101,16 +91,6 @@ function random_grid(model_factory, grid=carth_grid())
 			ps,
 			Flux.Losses.mse(model(x_train[:,:,1:100]), y_train_oh[:,1:100])
 		)
-	end
-end
-
-# ╔═╡ c3bef9cb-b7fa-48bd-8e1a-638bf2f0a3ee
-@bind samples Slider(1:1000, default=100, show_value=true)
-
-# ╔═╡ 932de4e4-b523-4e66-81f9-4105311d514b
-function loss_sample(samples)
-	map(range(0, length=samples)) do _
-		return sample_loss(mnistSimpleCNN7, Flux.Losses.mse)
 	end
 end
 
@@ -1635,8 +1615,6 @@ version = "0.9.1+5"
 # ╠═c1ac778a-691a-4841-baaf-5bd1a6e99152
 # ╠═f2b58a5d-1185-4845-9aef-623fb932f603
 # ╠═7dab6872-563c-46be-8be3-c62161965a42
-# ╠═c3bef9cb-b7fa-48bd-8e1a-638bf2f0a3ee
-# ╠═932de4e4-b523-4e66-81f9-4105311d514b
 # ╠═56d0ca64-469c-40d6-8816-3f5f1412e942
 # ╠═5829a097-c073-47ee-a63f-f51fad6df4d2
 # ╠═68280143-6e88-4a2d-a8df-d514f3bf5d41
