@@ -21,6 +21,7 @@ begin
 	using MLDatasets: MNIST
 	using DataFrames: DataFrame, push!, first, length
 	using PlutoUI: Slider
+	using LinearAlgebra: norm, LinearAlgebra
 end
 
 # ╔═╡ 909214e2-0320-4ddf-b146-b9d2b793355e
@@ -59,26 +60,49 @@ function mnistSimpleCNN7()
     )
 end
 
-# ╔═╡ 1875ac8f-f980-4e9b-82dd-d35f184be093
-Flux.params(mnistSimpleCNN7())
+# ╔═╡ 3d0e3fc0-853d-4d0d-b9fa-857cd0ecf3cf
+Flux.params(mnistSimpleCNN7())[1]
 
-# ╔═╡ f96bd6ff-3748-4a09-b832-b690bebe4db9
+# ╔═╡ 1875ac8f-f980-4e9b-82dd-d35f184be093
+p=Flux.Params(Flux.params(mnistSimpleCNN7()).- Flux.params(mnistSimpleCNN7()))
+
+# ╔═╡ 52d7dc57-5e57-4ec5-88c3-c2ff122d54ab
+begin
+	model = mnistSimpleCNN7()
+	Flux.loadparams!(model, p)
+	Flux.params(model)
+end
+
+# ╔═╡ c1ac778a-691a-4841-baaf-5bd1a6e99152
 struct EvalPoint
 	params
 	loss
 end
 
-# ╔═╡ f2b58a5d-1185-4845-9aef-623fb932f603
-function sample_loss(model_factory, loss)::EvalPoint
-	model = model_factory()
-    return EvalPoint(
-		Flux.params(model), 
-		loss(model(x_train[:,:,1:100]), y_train_oh[:,1:100])
-	)
+# ╔═╡ 7dab6872-563c-46be-8be3-c62161965a42
+function carth_grid(dim=3; start=0, stop=5, length=11)
+	Iterators.product(fill(range(start, stop, length=length), dim)...)
 end
 
-# ╔═╡ 30ae5840-ff23-418b-8084-70474f2909cc
-sample_loss(mnistSimpleCNN7, Flux.Losses.mse).loss
+# ╔═╡ f2b58a5d-1185-4845-9aef-623fb932f603
+function random_grid(model_factory, grid=carth_grid())
+	model = model_factory()
+	origin = Flux.params(model)
+	directions = map(1:length(size(grid))) do _
+		Flux.params(model_factory()) .- origin
+	end
+	directions = map(x-> x/norm(x), directions)
+	return map(grid) do coords
+		ps = origin .+ sum(zip(coords, directions)) do (coeff, dir)
+			coeff * dir # directions scaled by coefficients in coordinate vector
+		end
+		Flux.loadparams!(model, ps)
+		return EvalPoint(
+			ps,
+			Flux.Losses.mse(model(x_train[:,:,1:100]), y_train_oh[:,1:100])
+		)
+	end
+end
 
 # ╔═╡ c3bef9cb-b7fa-48bd-8e1a-638bf2f0a3ee
 @bind samples Slider(1:1000, default=100, show_value=true)
@@ -91,10 +115,7 @@ function loss_sample(samples)
 end
 
 # ╔═╡ 56d0ca64-469c-40d6-8816-3f5f1412e942
-evaluations = loss_sample(samples)
-
-# ╔═╡ 21ede6c7-816d-4912-8a52-496628fb2681
-few_evals = first(evaluations, 10)
+evaluations = random_grid(mnistSimpleCNN7, carth_grid(2, start=0, stop=3, length=10))
 
 # ╔═╡ 5829a097-c073-47ee-a63f-f51fad6df4d2
 struct VarPoint
@@ -103,18 +124,24 @@ struct VarPoint
 end
 
 # ╔═╡ 68280143-6e88-4a2d-a8df-d514f3bf5d41
-var_points = map(Iterators.product(few_evals, few_evals)) do (e1, e2)
-    VarPoint(
-		sqrt(sum(
-			x->x^2, 
-			Iterators.flatten(e1.params) .- Iterators.flatten(e2.params)
-		)),
-		(e1.loss - e2.loss)^2
-	)
+begin
+	few_evals = first(evaluations, 100)
+	var_points = map(Iterators.product(few_evals, few_evals)) do (e1, e2)
+	    VarPoint(
+			sqrt(sum(
+				x->x^2, 
+				Iterators.flatten(e1.params) .- Iterators.flatten(e2.params)
+			)),
+			(e1.loss - e2.loss)^2
+		)
+	end
 end
 
 # ╔═╡ 5b77abfe-bda2-43ea-b748-e703640c01fa
 sort(vec(var_points), by= varPt->varPt.distance)
+
+# ╔═╡ 446e1720-f4d5-47ad-8df5-d49ec4921401
+plot(unzip(map(pt-> (pt.distance, pt.sqDiff), vec(var_points))), st=:scatter)
 
 # ╔═╡ 9634df03-d300-4a55-9d1c-7406a425e64b
 size(few_evals)
@@ -124,6 +151,7 @@ PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 MLDatasets = "eb30cadb-4394-5ae3-aed4-317e484a6458"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
@@ -144,7 +172,7 @@ Zygote = "~0.6.40"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.7.1"
+julia_version = "1.7.3"
 manifest_format = "2.0"
 
 [[deps.AbstractFFTs]]
@@ -411,7 +439,7 @@ uuid = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
 version = "0.8.6"
 
 [[deps.Downloads]]
-deps = ["ArgTools", "LibCURL", "NetworkOptions"]
+deps = ["ArgTools", "FileWatching", "LibCURL", "NetworkOptions"]
 uuid = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
 
 [[deps.EarCut_jll]]
@@ -466,6 +494,9 @@ deps = ["Compat", "Dates", "Mmap", "Printf", "Test", "UUIDs"]
 git-tree-sha1 = "129b104185df66e408edd6625d480b7f9e9823a0"
 uuid = "48062228-2e41-5def-b9a4-89aafe57970f"
 version = "0.9.18"
+
+[[deps.FileWatching]]
+uuid = "7b1f6079-737a-58dc-b8bc-7a2ca5c1b5ee"
 
 [[deps.FillArrays]]
 deps = ["LinearAlgebra", "Random", "SparseArrays", "Statistics"]
@@ -1598,18 +1629,20 @@ version = "0.9.1+5"
 # ╠═6c708a17-4293-499a-88a2-368e29bb8f4d
 # ╠═e353dd27-a7a2-478b-a0e3-566aa035fe16
 # ╠═82de1985-98c8-4e3e-b424-b490c4b75bf6
+# ╠═3d0e3fc0-853d-4d0d-b9fa-857cd0ecf3cf
 # ╠═1875ac8f-f980-4e9b-82dd-d35f184be093
-# ╠═f96bd6ff-3748-4a09-b832-b690bebe4db9
+# ╠═52d7dc57-5e57-4ec5-88c3-c2ff122d54ab
+# ╠═c1ac778a-691a-4841-baaf-5bd1a6e99152
 # ╠═f2b58a5d-1185-4845-9aef-623fb932f603
-# ╠═30ae5840-ff23-418b-8084-70474f2909cc
+# ╠═7dab6872-563c-46be-8be3-c62161965a42
 # ╠═c3bef9cb-b7fa-48bd-8e1a-638bf2f0a3ee
 # ╠═932de4e4-b523-4e66-81f9-4105311d514b
 # ╠═56d0ca64-469c-40d6-8816-3f5f1412e942
-# ╠═21ede6c7-816d-4912-8a52-496628fb2681
 # ╠═5829a097-c073-47ee-a63f-f51fad6df4d2
 # ╠═68280143-6e88-4a2d-a8df-d514f3bf5d41
 # ╠═909214e2-0320-4ddf-b146-b9d2b793355e
 # ╠═5b77abfe-bda2-43ea-b748-e703640c01fa
+# ╠═446e1720-f4d5-47ad-8df5-d49ec4921401
 # ╠═9634df03-d300-4a55-9d1c-7406a425e64b
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
