@@ -50,19 +50,6 @@ function mnistSimpleCNN7()
     )
 end
 
-# ╔═╡ 3d0e3fc0-853d-4d0d-b9fa-857cd0ecf3cf
-Flux.params(mnistSimpleCNN7())[1]
-
-# ╔═╡ 1875ac8f-f980-4e9b-82dd-d35f184be093
-p=Flux.Params(Flux.params(mnistSimpleCNN7()).- Flux.params(mnistSimpleCNN7()))
-
-# ╔═╡ 52d7dc57-5e57-4ec5-88c3-c2ff122d54ab
-begin
-	model = mnistSimpleCNN7()
-	Flux.loadparams!(model, p)
-	Flux.params(model)
-end
-
 # ╔═╡ c1ac778a-691a-4841-baaf-5bd1a6e99152
 struct EvalPoint
 	params
@@ -74,14 +61,28 @@ function carth_grid(dim=3; start=0, stop=5, length=11)
 	Iterators.product(fill(range(start, stop, length=length), dim)...)
 end
 
+# ╔═╡ c21d3b90-1ef4-4107-8110-8f8cb5316ff6
+function toy_model()
+	return Flux.Chain(
+		Flux.flatten,
+		Flux.Dense(foldl(*, size(x_train[:,:,1])), 10, bias=false)
+	)
+end
+
+# ╔═╡ 3700b62f-3812-4ff6-81ec-66a8614dcc0d
+begin
+	grid = carth_grid(2, start=0, stop=1, length=2)
+	collect(grid)
+end
+
 # ╔═╡ f2b58a5d-1185-4845-9aef-623fb932f603
 function random_grid(model_factory, grid=carth_grid())
 	model = model_factory()
 	origin = Flux.params(model)
 	directions = map(1:length(size(grid))) do _
-		Flux.params(model_factory()) .- origin
+		dir = [x for x in Flux.params(model_factory())] # .- origin
+		return dir/norm(dir)
 	end
-	directions = map(x-> x/norm(x), directions)
 	return map(grid) do coords
 		ps = origin .+ sum(zip(coords, directions)) do (coeff, dir)
 			coeff * dir # directions scaled by coefficients in coordinate vector
@@ -95,7 +96,7 @@ function random_grid(model_factory, grid=carth_grid())
 end
 
 # ╔═╡ 56d0ca64-469c-40d6-8816-3f5f1412e942
-evaluations = random_grid(mnistSimpleCNN7, carth_grid(2, start=0, stop=3, length=10))
+evaluations = random_grid(toy_model, carth_grid(2, start=0, stop=1, length=11))
 
 # ╔═╡ 5829a097-c073-47ee-a63f-f51fad6df4d2
 struct VarPoint
@@ -103,15 +104,35 @@ struct VarPoint
 	sqDiff::Float32
 end
 
+# ╔═╡ 7dc19271-119d-4f51-9d3f-b2ed910d7ca5
+pairs(x) = ( (a,b) for (k,a) in enumerate(x) for b in Iterators.drop(x, k) )
+
+# ╔═╡ 72c1d6ca-438f-4a08-beeb-b707408620cc
+begin
+	model = toy_model()
+	origin = Flux.params(model)
+	directions = map(1:length(size(grid))) do _
+		dir = [x for x in Flux.params(toy_model())]
+		return dir/norm(dir)
+	end
+	r_grid = map(grid) do coords
+		ps = origin .+ sum(zip(coords, directions)) do (coeff, dir)
+			coeff * dir
+		end
+		Flux.loadparams!(model, deepcopy(ps))
+		return ps
+	end
+	map(pairs(r_grid)) do (x,y)
+		norm(x-y)
+	end
+end
+
 # ╔═╡ 68280143-6e88-4a2d-a8df-d514f3bf5d41
 begin
 	few_evals = first(evaluations, 100)
-	var_points = map(Iterators.product(few_evals, few_evals)) do (e1, e2)
+	var_points = map(pairs(few_evals)) do (e1, e2)
 	    VarPoint(
-			sqrt(sum(
-				x->x^2, 
-				Iterators.flatten(e1.params) .- Iterators.flatten(e2.params)
-			)),
+			norm(e1.params .- e2.params),
 			(e1.loss - e2.loss)^2
 		)
 	end
@@ -152,7 +173,7 @@ Zygote = "~0.6.40"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.7.3"
+julia_version = "1.7.1"
 manifest_format = "2.0"
 
 [[deps.AbstractFFTs]]
@@ -419,7 +440,7 @@ uuid = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
 version = "0.8.6"
 
 [[deps.Downloads]]
-deps = ["ArgTools", "FileWatching", "LibCURL", "NetworkOptions"]
+deps = ["ArgTools", "LibCURL", "NetworkOptions"]
 uuid = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
 
 [[deps.EarCut_jll]]
@@ -474,9 +495,6 @@ deps = ["Compat", "Dates", "Mmap", "Printf", "Test", "UUIDs"]
 git-tree-sha1 = "129b104185df66e408edd6625d480b7f9e9823a0"
 uuid = "48062228-2e41-5def-b9a4-89aafe57970f"
 version = "0.9.18"
-
-[[deps.FileWatching]]
-uuid = "7b1f6079-737a-58dc-b8bc-7a2ca5c1b5ee"
 
 [[deps.FillArrays]]
 deps = ["LinearAlgebra", "Random", "SparseArrays", "Statistics"]
@@ -1609,14 +1627,15 @@ version = "0.9.1+5"
 # ╠═6c708a17-4293-499a-88a2-368e29bb8f4d
 # ╠═e353dd27-a7a2-478b-a0e3-566aa035fe16
 # ╠═82de1985-98c8-4e3e-b424-b490c4b75bf6
-# ╠═3d0e3fc0-853d-4d0d-b9fa-857cd0ecf3cf
-# ╠═1875ac8f-f980-4e9b-82dd-d35f184be093
-# ╠═52d7dc57-5e57-4ec5-88c3-c2ff122d54ab
 # ╠═c1ac778a-691a-4841-baaf-5bd1a6e99152
-# ╠═f2b58a5d-1185-4845-9aef-623fb932f603
 # ╠═7dab6872-563c-46be-8be3-c62161965a42
+# ╠═c21d3b90-1ef4-4107-8110-8f8cb5316ff6
+# ╠═3700b62f-3812-4ff6-81ec-66a8614dcc0d
+# ╠═72c1d6ca-438f-4a08-beeb-b707408620cc
+# ╠═f2b58a5d-1185-4845-9aef-623fb932f603
 # ╠═56d0ca64-469c-40d6-8816-3f5f1412e942
 # ╠═5829a097-c073-47ee-a63f-f51fad6df4d2
+# ╠═7dc19271-119d-4f51-9d3f-b2ed910d7ca5
 # ╠═68280143-6e88-4a2d-a8df-d514f3bf5d41
 # ╠═909214e2-0320-4ddf-b146-b9d2b793355e
 # ╠═5b77abfe-bda2-43ea-b748-e703640c01fa
