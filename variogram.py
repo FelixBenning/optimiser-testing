@@ -165,5 +165,6 @@ def variogram(ModelFactory, data_loader, grid=carth_grid()):
 variogram(ToyModel, train_data_loader)
 
 #%%
-variogram(ModelM7, train_data_loader, carth_grid(dim=2, start=0, end=2, length=5))
+df= variogram(ModelM7, train_data_loader, carth_grid(dim=2, start=0, end=2, length=5))
+df.applymap(float).plot(x='distance', y='sqLossDiff', kind="scatter")
 # %%
