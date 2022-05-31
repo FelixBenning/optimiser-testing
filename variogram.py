@@ -6,6 +6,16 @@ import torch.nn.functional as F
 from torchvision import datasets
 from torchvision.transforms import ToTensor, Lambda
 
+import matplotlib.pyplot as plt
+
+import functools as func
+
+# %% grid
+def carth_grid(dim=3, start=0, end=2, length=3):
+    x = (torch.arange(start=start, end=end, step=(end - start) / length),) * dim
+    return torch.cartesian_prod(*x)
+
+
 # %% Import Dataset
 ds = datasets.MNIST(
     root="data",
@@ -19,21 +29,66 @@ ds = datasets.MNIST(
     ),
 )
 
-# %% Plot
-import matplotlib.pyplot as plt
+# %% Dataloader
+from torch.utils.data import DataLoader
 
-figure = plt.figure(figsize=(8,8))
-cols, rows = 3,3
-for idx in range(cols*rows):
+train_data_loader = DataLoader(ds, batch_size=100, shuffle=True)
+
+# %% Parameter normalization
+def norm(param_dict):
+    return torch.sqrt(
+        func.reduce(
+            lambda acc, key: acc + torch.sum(torch.square(param_dict[key])),
+            param_dict,
+            0,
+        )
+    )
+
+
+def normalize_params(param_dict):
+    """inplace operation"""
+    params_norm = norm(param_dict)
+    return {name: param / params_norm for name, param in param_dict.items()}
+
+# %% Random Grid
+def random_grid(model_factory, grid=carth_grid()):
+    model = model_factory()
+    origin = {n: p for n, p in model.named_parameters()}
+    directions = [
+        normalize_params({n: p for n, p in model_factory().named_parameters()})
+        for _ in range(grid.size()[1])  # for every dimension
+    ]
+
+    def coordinate_system_change(coords):
+        return {
+            n: p + sum(map(lambda dir, coeff: coeff * dir[n], directions, coords))
+            for n, p in origin.items()
+        }
+    
+    return map(coordinate_system_change, grid)
+
+
+# %% Plot
+
+figure = plt.figure(figsize=(8, 8))
+cols, rows = 3, 3
+for idx in range(cols * rows):
     sample_idx = torch.randint(len(ds), size=(1,)).item()
-    img, label= ds[sample_idx]
-    figure.add_subplot(rows, cols, idx+1)
+    img, label = ds[sample_idx]
+    figure.add_subplot(rows, cols, idx + 1)
     plt.axis("off")
     plt.imshow(img.squeeze(), cmap="gray")
 
 plt.show()
 
+# %%
+class ToyModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.dense = nn.Linear(28 * 28, 10, bias=False)
 
+    def forward(self, x):
+        return self.dense(torch.flatten(x, 1))
 
 
 # %% https://github.com/ansh941/MnistSimpleCNN/blob/master/code/models/modelM7.py
