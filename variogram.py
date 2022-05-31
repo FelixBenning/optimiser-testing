@@ -7,6 +7,7 @@ from torchvision import datasets
 from torchvision.transforms import ToTensor, Lambda
 
 import matplotlib.pyplot as plt
+import pandas as pd
 
 import functools as func
 
@@ -50,6 +51,7 @@ def normalize_params(param_dict):
     params_norm = norm(param_dict)
     return {name: param / params_norm for name, param in param_dict.items()}
 
+
 # %% Random Grid
 def random_grid(model_factory, grid=carth_grid()):
     model = model_factory()
@@ -64,8 +66,17 @@ def random_grid(model_factory, grid=carth_grid()):
             n: p + sum(map(lambda dir, coeff: coeff * dir[n], directions, coords))
             for n, p in origin.items()
         }
-    
+
     return map(coordinate_system_change, grid)
+
+
+# %% Pairs
+def pairs(unique_elements):
+    return (
+        (a, b)
+        for (k, a) in enumerate(unique_elements)
+        for b in unique_elements[k + 1 :]
+    )
 
 
 # %% Plot
@@ -121,4 +132,38 @@ class ModelM7(nn.Module):
         return F.log_softmax(logits, dim=1)
 
 
+# %%
+def evaluate(model_factory, params, data, loss):
+    model = model_factory()
+    model_state = model.state_dict()
+    for name, param in params.items():
+        model_state[name] = param
+
+    inp, label = data
+    return loss(model(inp), label)
+
+# %%
+def diff(params1, params2):
+    return {name: params1[name]-params2[name] for name in params1}
+
+# %%
+def variogram(ModelFactory, data_loader, grid=carth_grid()):
+    loss = torch.nn.CrossEntropyLoss()
+    return pd.DataFrame.from_records([
+        {
+            "sqLossDiff": (
+                evaluate(ModelFactory, params[0], data, loss)
+                - evaluate(ModelFactory, params[1], data, loss)
+            )
+            ** 2,
+            "distance": norm(diff(params[0],params[1])),
+        }
+        for params, data in zip(pairs(list(random_grid(ModelFactory, grid))), data_loader)
+    ])
+
+# %%
+variogram(ToyModel, train_data_loader)
+
+#%%
+variogram(ModelM7, train_data_loader, carth_grid(dim=2, start=0, end=2, length=5))
 # %%
