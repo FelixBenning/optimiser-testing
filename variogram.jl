@@ -132,9 +132,6 @@ begin
 	end
 end
 
-# ╔═╡ 85855c1e-229e-4f6e-9646-d77546fcbd6a
-@bind epsilon Slider(0:0.01:1, default=0.2, show_value=true)
-
 # ╔═╡ 1198bf48-2d20-48c6-9530-377b87327553
 @bind shape Slider(0:0.0001:0.1, default=0.1, show_value=true)
 
@@ -150,7 +147,7 @@ gauss_variogram(h) = 10^scale *(1-exp(-shape* h^2))
 # ╔═╡ 56d0ca64-469c-40d6-8816-3f5f1412e942
 evaluations = random_grid(
 	mnistSimpleCNN7, 
-	carth_grid(2, start=0, stop=sqrt(h_end), length=11)
+	carth_grid(2, start=0, stop=h_end/sqrt(2), length=11)
 )
 
 # ╔═╡ 68280143-6e88-4a2d-a8df-d514f3bf5d41
@@ -167,6 +164,12 @@ end
 # ╔═╡ 5b77abfe-bda2-43ea-b748-e703640c01fa
 sort(vec(var_points), by= varPt->varPt.distance)
 
+# ╔═╡ 71beb874-da12-43dc-be47-5be439963ff2
+x_range = 0:0.1:h_end
+
+# ╔═╡ 85855c1e-229e-4f6e-9646-d77546fcbd6a
+@bind epsilon Slider(0:0.01:1, default=0.2, show_value=true)
+
 # ╔═╡ 1d4f47bf-1d7b-4a89-8498-8761144173e0
 function gamma(h)
 	return Statistics.mean(map(
@@ -176,9 +179,6 @@ function gamma(h)
 		end)
 	)
 end
-
-# ╔═╡ 71beb874-da12-43dc-be47-5be439963ff2
-x_range = 0:0.1:h_end
 
 # ╔═╡ 88f69248-822d-4e10-bec6-cfc047e5eed8
 begin
