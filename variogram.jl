@@ -119,30 +119,8 @@ end
 # ╔═╡ 7dc19271-119d-4f51-9d3f-b2ed910d7ca5
 pairs(x) = ( (a,b) for (k,a) in enumerate(x) for b in Iterators.drop(x, k) )
 
-# ╔═╡ 72c1d6ca-438f-4a08-beeb-b707408620cc
-begin
-	origin = toy_model()
-	# orthonormal basis of parameters
-	directions = [normalize(toy_model()) for _ in 1:length(size(grid))]
-	r_grid = map(grid) do coords
-		affine_linear_combination(origin, coords, directions)
-	end
-	map(pairs(r_grid)) do (x,y)
-		norm(Flux.destructure(x)[1]-Flux.destructure(y)[1])
-	end
-end
-
-# ╔═╡ 1198bf48-2d20-48c6-9530-377b87327553
-@bind shape Slider(0:0.0001:0.1, default=0.1, show_value=true)
-
-# ╔═╡ 6bd8609f-e066-4295-9f8f-f0e2d9a4b3fb
-@bind scale Slider(-5:0.1:0, default=-4, show_value=true)
-
-# ╔═╡ 3b983b22-7744-443b-a928-a6bc56d5251c
-gauss_variogram(h) = 10^scale *(1-exp(-shape* h^2))
-
 # ╔═╡ 0366deaa-7aea-49c9-90bd-340210475d6d
-@bind h_end Slider(2:30, default=5, show_value=true)
+@bind h_end Slider(2:60, default=5, show_value=true)
 
 # ╔═╡ 56d0ca64-469c-40d6-8816-3f5f1412e942
 evaluations = random_grid(
@@ -168,22 +146,19 @@ sort(vec(var_points), by= varPt->varPt.distance)
 x_range = 0:0.1:h_end
 
 # ╔═╡ 85855c1e-229e-4f6e-9646-d77546fcbd6a
-@bind epsilon Slider(0:0.01:1, default=0.2, show_value=true)
+@bind epsilon Slider(0:0.01:h_end/3, default=0.2, show_value=true)
 
 # ╔═╡ 1d4f47bf-1d7b-4a89-8498-8761144173e0
-function gamma(h)
-	return Statistics.mean(map(
-		pt-> pt.sqDiff, 
-		filter(var_points) do pt
-			abs(pt.distance - h) < epsilon
-		end)
-	)
-end
-
-# ╔═╡ 88f69248-822d-4e10-bec6-cfc047e5eed8
-begin
-	log_plt = plot(x_range, map(x-> log(gamma(x)), x_range))
-	plot!(log_plt, x_range, map(x-> log(gauss_variogram(x)), x_range))
+function emp_variogram(variation_points::Vector{VarPoint}, epsilon)
+	function gamma(h)
+		return Statistics.mean(map(
+			pt-> pt.sqDiff, 
+			filter(variation_points) do pt
+				abs(pt.distance - h) < epsilon
+			end)
+		)
+	end
+	return gamma
 end
 
 # ╔═╡ 446e1720-f4d5-47ad-8df5-d49ec4921401
@@ -192,12 +167,10 @@ begin
 		unzip(map(pt-> (pt.distance, pt.sqDiff), vec(var_points))), 
 		st=:scatter, label=nothing
 	)
-	plot!(plt, x_range, map(gamma,x_range), label="empirical variogram", lw=3)
-	# plot!(plt, x_range, map(gauss_variogram,x_range), label="gauss variogram", lw=3)
+	plot!(plt, 
+		x_range, map(emp_variogram(var_points, epsilon), x_range), 
+		label="empirical variogram", lw=3)
 end
-
-# ╔═╡ f8829c77-1298-4ced-b567-486b8352680a
-
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -1677,31 +1650,25 @@ version = "0.9.1+5"
 
 # ╔═╡ Cell order:
 # ╠═6fb3abe0-db63-11ec-3d8b-696b950d494b
-# ╠═6c708a17-4293-499a-88a2-368e29bb8f4d
+# ╟─6c708a17-4293-499a-88a2-368e29bb8f4d
 # ╠═e353dd27-a7a2-478b-a0e3-566aa035fe16
 # ╠═82de1985-98c8-4e3e-b424-b490c4b75bf6
+# ╟─13058c7b-429a-4510-961a-4f31f81a43a0
+# ╟─7dab6872-563c-46be-8be3-c62161965a42
+# ╟─c21d3b90-1ef4-4107-8110-8f8cb5316ff6
+# ╟─29c35dcf-8909-4895-90a4-6219ffb73b0f
+# ╟─7dc19271-119d-4f51-9d3f-b2ed910d7ca5
 # ╠═c1ac778a-691a-4841-baaf-5bd1a6e99152
-# ╠═13058c7b-429a-4510-961a-4f31f81a43a0
-# ╠═7dab6872-563c-46be-8be3-c62161965a42
-# ╠═c21d3b90-1ef4-4107-8110-8f8cb5316ff6
-# ╠═29c35dcf-8909-4895-90a4-6219ffb73b0f
-# ╠═72c1d6ca-438f-4a08-beeb-b707408620cc
 # ╠═f2b58a5d-1185-4845-9aef-623fb932f603
 # ╠═56d0ca64-469c-40d6-8816-3f5f1412e942
 # ╠═5829a097-c073-47ee-a63f-f51fad6df4d2
-# ╠═7dc19271-119d-4f51-9d3f-b2ed910d7ca5
 # ╠═68280143-6e88-4a2d-a8df-d514f3bf5d41
 # ╠═909214e2-0320-4ddf-b146-b9d2b793355e
 # ╠═5b77abfe-bda2-43ea-b748-e703640c01fa
-# ╠═1d4f47bf-1d7b-4a89-8498-8761144173e0
-# ╠═1198bf48-2d20-48c6-9530-377b87327553
-# ╠═6bd8609f-e066-4295-9f8f-f0e2d9a4b3fb
-# ╠═3b983b22-7744-443b-a928-a6bc56d5251c
 # ╠═0366deaa-7aea-49c9-90bd-340210475d6d
-# ╠═71beb874-da12-43dc-be47-5be439963ff2
-# ╠═88f69248-822d-4e10-bec6-cfc047e5eed8
+# ╟─71beb874-da12-43dc-be47-5be439963ff2
 # ╠═85855c1e-229e-4f6e-9646-d77546fcbd6a
 # ╠═446e1720-f4d5-47ad-8df5-d49ec4921401
-# ╠═f8829c77-1298-4ced-b567-486b8352680a
+# ╟─1d4f47bf-1d7b-4a89-8498-8761144173e0
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
