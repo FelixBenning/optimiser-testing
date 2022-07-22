@@ -52,41 +52,37 @@ class GaussianRandomField:
             case 0:
                 L = torch.sqrt(cov)
                 self.dim = 1
-                eval = L * torch.randn(1) 
+                eval = L * torch.randn(1)
             case 2:
                 # calculate cholesky for the first time
                 L = linalg.cholesky(self.cov_kernel(point, point))
                 self.dim = L.size(0)
                 eval = L @ torch.randn(self.dim)
             case _:
-                raise TypeError("The covariance kernel does not return a covariance matrix")
-        
-        if not self.remaining_alloc: # no allocation happened
+                raise TypeError(
+                    "The covariance kernel does not return a covariance matrix"
+                )
+
+        if not self.remaining_alloc:  # no allocation happened
             self.cholesky_cov_L = L
             self.remaining_alloc = 0
             self.evals = torch.stack([eval])
-        else: # pre-allocation happened, save L into preallocation
-            self.cholesky_cov_L[:self.dim, :self.dim] = L
+        else:  # pre-allocation happened, save L into preallocation
+            self.cholesky_cov_L[: self.dim, : self.dim] = L
             self.remaining_alloc -= 1
             self.evals[0] = eval
 
-        return eval 
+        return eval
 
 
 # %%
-class EvaluatedGaussianRandomField(GaussianRandomField):
+class EvaluatedMultinomialGaussianRandomField(GaussianRandomField):
     __slots__ = tuple()
 
-    def __init__(self, covariance_fct, points, evals, cholesky_cov_L=None):
+    def __init__(self, covariance_fct, points, evals, dim, cholesky_cov_L=None):
         super().__init__(covariance_fct)
         self.points = points
-        match evals.dim():
-            case 1:  # every evaluation is just a number
-                self.dim = 1
-            case 2:
-                self.dim = evals.size(1)
-            case _:
-                raise IndexSizeErr("Wrong number of evaluation dimensions")
+        self.dim = evals.size(1)
 
         self.remaining_alloc = 0
         if cholesky_cov_L:
@@ -102,24 +98,85 @@ class EvaluatedGaussianRandomField(GaussianRandomField):
             self.allocate(2 * n_points, self.dim)
         self.remaining_alloc -= 1
 
-        # update points
-        self.points.append(point)
-
         # get cholesky and covariance
         L = self.cholesky_cov_L[:n_sized, :n_sized]
-        C_0 = torch.cat([self.cov_kernel(pt, point) for pt in self.points])
+        C_0 = torch.stack([self.cov_kernel(pt, point) for pt in self.points])
+
+        # update points
+        self.points.append(point)
 
         # update cholesky
         L_ext = linalg.solve_triangular(L, C_0)
         self.cholesky_cov_L[n_sized, :n_sized] = L_ext.T
         linalg.cholesky(
             torch.mm(L_ext, L_ext.T) - self.cov_kernel(point, point),
-            out=self.cholesky_cov_L[n_sized, n_sized + self.dim],
+            out=self.cholesky_cov_L[
+                n_sized : n_sized + self.dim, n_sized : n_sized + self.dim
+            ],
         )
 
         # generate evals
         cond_mean = L_ext.T * linalg.solve_triangular(L, self.evals[:n_points])
         new_evals = cond_mean + torch.mm(L_ext, torch.randn(self.dim))
+
+        # update evals
+        self.evals[n_points] = new_evals
+        return new_evals
+
+
+# %%
+class EvaluatedGaussianRandomField(GaussianRandomField):
+    __slots__ = tuple()
+
+    def __init__(self, covariance_fct, points, evals, cholesky_cov_L=None):
+        super().__init__(covariance_fct)
+        self.points = points
+        self.evals = evals
+        self.dim = 1
+
+        self.remaining_alloc = 0
+        if cholesky_cov_L:
+            self.cholesky_cov_L = cholesky_cov_L
+        else:
+            self.cholesky_cov_L = linalg.cholesky(self.cov_kernel(points))
+
+    def __call__(self, point):
+        # allocation and size considerations
+        n_points = len(self.points)
+        if not self.remaining_alloc:
+            self.allocate(2 * n_points, self.dim)
+        self.remaining_alloc -= 1
+
+        # get cholesky and covariance
+        L = self.cholesky_cov_L[:n_points, :n_points]
+        C_0 = torch.stack([self.cov_kernel(pt, point) for pt in self.points])
+
+        # update points
+        self.points.append(point)
+
+        # update cholesky
+        L_ext = linalg.solve_triangular(
+            L,
+            C_0.reshape((n_points, 1)),
+            upper=False,
+            out=self.cholesky_cov_L[n_points, :n_points],
+        ).reshape((n_points))
+        # self.cholesky_cov_L[n_points, :n_points] = L_ext.T
+
+        cond_var = torch.dot(L_ext, L_ext)
+        torch.sqrt(
+            self.cov_kernel(point, point) - cond_var,
+            out=self.cholesky_cov_L[n_points, n_points],
+        )
+
+        # generate evals
+        cond_mean = torch.dot(
+            L_ext,
+            linalg.solve_triangular(L, self.evals[:n_points], upper=False).reshape(
+                (n_points)
+            ),
+        )
+        new_evals = cond_mean +  cond_var * torch.randn(self.dim)
 
         # update evals
         self.evals[n_points] = new_evals
@@ -142,7 +199,6 @@ class SquaredExponentialKernel(torch.jit.ScriptModule):
         )
 
 
-# %%
 if __name__ == "__main__":
     # %%
     import matplotlib.pyplot as plt
@@ -150,7 +206,10 @@ if __name__ == "__main__":
     # %%
     rf = GaussianRandomField(SquaredExponentialKernel())
     rf(torch.zeros(3))
-
+    rf(torch.Tensor([1, 0, 0]))
+    rf(torch.Tensor([0, 1, 0]))
+    rf(torch.Tensor([0,0,1]))
+    print(rf.cholesky_cov_L)
     # %%
     x = torch.Tensor(range(1000))
 
