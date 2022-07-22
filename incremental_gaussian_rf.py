@@ -1,6 +1,6 @@
 # %%
-import itertools
 from re import I
+from typing import Iterable
 from xml.dom import IndexSizeErr
 import torch
 
@@ -21,6 +21,12 @@ class GaussianRandomField:
         self.cov_kernel = covariance_kernel
         self.remaining_alloc = 0
         self.points = []
+    
+    def evaluate(self, points):
+        if isinstance(points, Iterable):
+            [self(pt) for pt in points]
+        else:
+            torch.stack([self(pt) for pt in torch.split(points)])
 
     def allocate(self, n_points, dim):
         """pre-allocate space for n_points of evaluation, where every evaluation needs space dim"""
