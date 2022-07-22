@@ -42,18 +42,17 @@ class GaussianRandomField:
         self.remaining_alloc = n_points - nu_curr
 
     def __call__(self, point):
-        self.__class__ = EvaluatedGaussianRandomField
-
         # update points
         self.points.append(point)
-
-        cov = self.cov_kernel(point, point)
-        match cov.dim():
+        var = self.cov_kernel(point, point)
+        match var.dim():
             case 0:
-                L = torch.sqrt(cov)
+                self.__class__ = EvaluatedGaussianRandomField
+                L = torch.sqrt(var)
                 self.dim = 1
                 eval = L * torch.randn(1)
             case 2:
+                self.__class__ = EvaluatedMultinomialGaussianRandomField
                 # calculate cholesky for the first time
                 L = linalg.cholesky(self.cov_kernel(point, point))
                 self.dim = L.size(0)
@@ -79,7 +78,7 @@ class GaussianRandomField:
 class EvaluatedMultinomialGaussianRandomField(GaussianRandomField):
     __slots__ = tuple()
 
-    def __init__(self, covariance_fct, points, evals, dim, cholesky_cov_L=None):
+    def __init__(self, covariance_fct, points, evals, cholesky_cov_L=None):
         super().__init__(covariance_fct)
         self.points = points
         self.dim = evals.size(1)
@@ -100,24 +99,27 @@ class EvaluatedMultinomialGaussianRandomField(GaussianRandomField):
 
         # get cholesky and covariance
         L = self.cholesky_cov_L[:n_sized, :n_sized]
-        C_0 = torch.stack([self.cov_kernel(pt, point) for pt in self.points])
+        C_0 = torch.cat([self.cov_kernel(pt, point) for pt in self.points])
 
         # update points
         self.points.append(point)
 
         # update cholesky
-        L_ext = linalg.solve_triangular(L, C_0)
+        L_ext = linalg.solve_triangular(L, C_0, upper=False)
+        cond_cov = L_ext @ L_ext.T
         self.cholesky_cov_L[n_sized, :n_sized] = L_ext.T
         linalg.cholesky(
-            torch.mm(L_ext, L_ext.T) - self.cov_kernel(point, point),
+            self.cov_kernel(point, point) - cond_cov,
             out=self.cholesky_cov_L[
                 n_sized : n_sized + self.dim, n_sized : n_sized + self.dim
             ],
         )
 
         # generate evals
-        cond_mean = L_ext.T * linalg.solve_triangular(L, self.evals[:n_points])
-        new_evals = cond_mean + torch.mm(L_ext, torch.randn(self.dim))
+        cond_mean = L_ext.T @ linalg.solve_triangular(
+            L, self.evals[:n_points].reshape((n_points, 1)), upper=False
+        )
+        new_evals = cond_mean + linalg.cholesky(cond_cov) @ torch.randn(self.dim)
 
         # update evals
         self.evals[n_points] = new_evals
@@ -144,7 +146,7 @@ class EvaluatedGaussianRandomField(GaussianRandomField):
         # allocation and size considerations
         n_points = len(self.points)
         if not self.remaining_alloc:
-            self.allocate(2 * n_points, self.dim)
+            self.allocate(2 * n_points, 1)
         self.remaining_alloc -= 1
 
         # get cholesky and covariance
@@ -161,7 +163,6 @@ class EvaluatedGaussianRandomField(GaussianRandomField):
             upper=False,
             out=self.cholesky_cov_L[n_points, :n_points],
         ).reshape((n_points))
-        # self.cholesky_cov_L[n_points, :n_points] = L_ext.T
 
         cond_var = torch.dot(L_ext, L_ext)
         torch.sqrt(
@@ -176,7 +177,7 @@ class EvaluatedGaussianRandomField(GaussianRandomField):
                 (n_points)
             ),
         )
-        new_evals = cond_mean +  cond_var * torch.randn(self.dim)
+        new_evals = cond_mean + torch.sqrt(cond_var) * torch.randn(1)
 
         # update evals
         self.evals[n_points] = new_evals
@@ -205,11 +206,14 @@ if __name__ == "__main__":
 
     # %%
     rf = GaussianRandomField(SquaredExponentialKernel())
-    rf(torch.zeros(3))
     rf(torch.Tensor([1, 0, 0]))
+    rf(torch.zeros(3))
     rf(torch.Tensor([0, 1, 0]))
-    rf(torch.Tensor([0,0,1]))
-    print(rf.cholesky_cov_L)
+    rf(torch.Tensor([0, 0, 1]))
+    rf(torch.Tensor([2, 0, 0]))
+    rf(torch.Tensor([0, 2, 0]))
+    rf(torch.Tensor([0, 0, 2]))
+    print(torch.tril(rf.cholesky_cov_L[:7, :7]))
     # %%
     x = torch.Tensor(range(1000))
 
