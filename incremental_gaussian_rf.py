@@ -1,5 +1,4 @@
 # %%
-from re import I
 from typing import Iterable
 from xml.dom import IndexSizeErr
 import torch
@@ -21,7 +20,7 @@ class GaussianRandomField:
         self.cov_kernel = covariance_kernel
         self.remaining_alloc = 0
         self.points = []
-    
+
     def evaluate(self, points):
         if isinstance(points, Iterable):
             [self(pt) for pt in points]
@@ -170,9 +169,8 @@ class EvaluatedGaussianRandomField(GaussianRandomField):
             out=self.cholesky_cov_L[n_points, :n_points],
         ).reshape((n_points))
 
-        cond_var = torch.dot(L_ext, L_ext)
-        torch.sqrt(
-            self.cov_kernel(point, point) - cond_var,
+        cond_var = torch.sqrt(
+            self.cov_kernel(point, point) - torch.dot(L_ext, L_ext),
             out=self.cholesky_cov_L[n_points, n_points],
         )
 
@@ -200,13 +198,57 @@ class SquaredExponentialKernel(torch.jit.ScriptModule):
         self.length_scale = length_scale
 
     def forward(self, x, y):
-        diff = x - y
+        diff = x - y if x.dim() else (x - y).reshape((1))
         return self.variance * torch.exp(
-            -torch.dot(diff, diff) / (2 * self.length_scale)
+            -torch.dot(diff, diff) / (2 * (self.length_scale**2))
+        )
+
+    def matrix(self, points):
+        n = len(points)
+        grid = (lambda x: torch.cartesian_prod(x, x))(points).reshape(n, n, 2)
+        return torch.tensor([[self(*elm) for elm in row] for row in grid])
+
+
+# %%
+class SquaredExponentialKernelInclDerivative(torch.jit.ScriptModule):
+    __constants__ = ["variance", "length_scale"]
+
+    def __init__(self, variance=1, length_scale=1):
+        super().__init__()
+        self.variance = variance
+        self.length_scale = length_scale
+
+    def forward(self, x, y):
+        diff = x - y
+        dim = 1 if (diff.dim() == 0) else diff.size(0)
+        diff = diff.reshape((1, dim))  # row vector
+        exponential_factor = self.variance * torch.exp(
+            -diff @ diff.T / (2 * (self.length_scale**2))
+        )
+        c_L = torch.eye(1)  # cov(L, L) up to exponential_factor
+        c_grad_L = diff / (self.length_scale**2)
+        # cov(grad L,L) up to minus and exponential_factor
+        c_grad = -c_grad_L.T @ c_grad_L + torch.eye(dim) / (self.length_scale**2)
+
+        return exponential_factor * torch.cat(
+            (
+                torch.cat((c_L, c_grad_L), dim=1),
+                torch.cat((-c_grad_L.T, c_grad), dim=1),
+            )
+        )
+
+    def matrix(self, points):
+        n = len(points)
+        grid = (lambda x: torch.cartesian_prod(x, x))(points).reshape(n, n, 2)
+        return torch.cat(
+            [torch.cat([self(*elm) for elm in row], dim=1) for row in grid]
         )
 
 
-if __name__ == "__main__":
+
+# %%
+def main():
+    pass
     # %%
     import matplotlib.pyplot as plt
 
@@ -220,7 +262,28 @@ if __name__ == "__main__":
     rf(torch.Tensor([0, 2, 0]))
     rf(torch.Tensor([0, 0, 2]))
     print(torch.tril(rf.cholesky_cov_L[:7, :7]))
-    # %%
-    x = torch.Tensor(range(1000))
 
-    plt.plot()
+
+    # %%
+    sqk = SquaredExponentialKernel()
+    cov_matrix = sqk.matrix(torch.linspace(0,1,8))
+    linalg.cholesky(cov_matrix) # not positive definite ????
+
+    # %%
+    x = torch.linspace(0, 1, 10).reshape(10, 1)
+    rf = GaussianRandomField(SquaredExponentialKernel())
+    y = [rf(pt) for pt in x]
+    plt.plot(x, y)
+
+    k = SquaredExponentialKernelInclDerivative()
+    cov = k(torch.Tensor([0, 1]), torch.Tensor([0, 0]))
+
+    rf = GaussianRandomField(k)
+    rf(torch.Tensor([0]))
+    rf(torch.Tensor([0.5]))
+    rf(torch.Tensor([1]))
+
+
+# %%
+if __name__ == "__main__":
+    main()
