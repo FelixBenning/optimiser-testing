@@ -1,7 +1,8 @@
 # %%
 from typing import Iterable
-from xml.dom import IndexSizeErr
+import math
 import torch
+import matplotlib.pyplot as plt
 
 from torch import linalg
 
@@ -244,13 +245,46 @@ class SquaredExponentialKernelInclDerivative(torch.jit.ScriptModule):
             [torch.cat([self(*elm) for elm in row], dim=1) for row in grid]
         )
 
+# %%
+def plotRF(points=200, jitter=0.00001):
+    k= SquaredExponentialKernelInclDerivative()
+    half = points // 2
+    points += int(points % 2 == 0)
+    inputs = torch.cat([torch.tensor([0]), torch.linspace(-15, -15/half, half), torch.linspace(15/half, 15, half)])
+    L = linalg.cholesky(k.matrix(inputs) + torch.eye(2*points)*jitter)
+    iid_normal = torch.randn(2*points)
+    pt_and_grads = L @ iid_normal
+    pt, grads = pt_and_grads[0::2], pt_and_grads[1::2]
 
+    pt0, grad0 = pt[0], grads[0]
+    def first_taylor(x):
+        return pt0 + x*grad0
+    
+    bounds = (torch.min(pt)-pt0)/grad0, (torch.max(pt) - pt0)/grad0
+    bounds = min(bounds), max(bounds)
+
+    def mean_after_first_sample(x):
+        return (linalg.solve_triangular(L[:2,:2], k(0, x), upper=False).T @ iid_normal[:2])[0]
+    
+    a = list(zip(inputs, pt))
+    a.sort()
+    sorted_in, sorted_pt = zip(*a)
+
+    pred = [mean_after_first_sample(x) for x in sorted_in]
+
+    plt.plot(sorted_in, sorted_pt, "b-")
+    plt.plot([0], [pt0], "ko", label="Starting Point")
+    plt.plot(bounds, [first_taylor(x) for x in bounds], "g--", label="Taylor")
+    plt.plot(sorted_in, pred, "r--", label="BLUE")
+    plt.legend(loc="upper left")
+    plt.show()
+
+plotRF()
 
 # %%
 def main():
     pass
     # %%
-    import matplotlib.pyplot as plt
 
     # %%
     rf = GaussianRandomField(SquaredExponentialKernel())
@@ -270,7 +304,7 @@ def main():
     linalg.cholesky(cov_matrix) # not positive definite ????
 
     # %%
-    x = torch.linspace(0, 1, 10).reshape(10, 1)
+    x = torch.linspace(0, 10, 30).reshape(30, 1)
     rf = GaussianRandomField(SquaredExponentialKernel())
     y = [rf(pt) for pt in x]
     plt.plot(x, y)
