@@ -14,19 +14,10 @@ end
 # ╔═╡ 85316f5e-12ad-4aca-b1d4-9fc2a66d5469
 rng = Random.MersenneTwister(1234)
 
-# ╔═╡ 1d0075aa-5c04-4466-9325-37bb133cd37b
-
-
-# ╔═╡ 2368d0f8-2316-4b2e-809d-7eac85d4633f
-
-
 # ╔═╡ e232fd87-92eb-4f82-8374-373d9b3d317c
 struct PackedLowerTriangular{T}
 	data::Vector{T}
 end
-
-
-# ╔═╡ 9b629aba-73e8-49ba-b31f-03e89b430146
 
 
 # ╔═╡ de992a3c-c568-46a6-9555-48838ad7045e
@@ -52,7 +43,7 @@ begin
 		chol_cov::PackedLowerTriangular{T}
 		evaluations::Vector{T}
 
-		GaussianRandomField{T}(cov::Function) where T = new(
+		GaussianRandomField{T}(cov::Function) where T<:Number = new(
 			cov
 		)
 	end
@@ -62,11 +53,10 @@ begin
 	"""
 	function (rf::GaussianRandomField{T})(x::Vector{T}) where {T}
 		try
-			cross_cov::Vector{T} = map(eachcol(rf.evaluated_points)) do pt
+			coeff::Vector{T} = rf.chol_cov \ map(eachcol(rf.evaluated_points)) do pt
 				rf.cov(pt, x)
 			end
 			rf.evaluated_points = [rf.evaluated_points x]
-			coeff = rf.chol_cov \ cross_cov
 			cond_σ = sqrt(rf.cov(x,x) - dot(coeff, coeff))
 			push!(rf.chol_cov.data, coeff..., cond_σ)
 			push!(rf.randomness, randn(rng, T))
@@ -85,6 +75,10 @@ begin
 		end
 		return rf.evaluations[end]
 	end
+
+	# function sizehint!(rf::GaussianRandomField, n)
+	# 	# TODO: use sizehint! on all fields
+	# end
 end
 
 # ╔═╡ beaf95e8-10f0-4b34-be36-2ba7825a7d17
@@ -188,10 +182,7 @@ uuid = "8e850b90-86db-534c-a0d3-1478176c7d93"
 # ╔═╡ Cell order:
 # ╠═4d5ceb64-18e2-40b6-b6ab-9a7befbe27b2
 # ╠═85316f5e-12ad-4aca-b1d4-9fc2a66d5469
-# ╠═1d0075aa-5c04-4466-9325-37bb133cd37b
-# ╠═2368d0f8-2316-4b2e-809d-7eac85d4633f
 # ╠═e232fd87-92eb-4f82-8374-373d9b3d317c
-# ╠═9b629aba-73e8-49ba-b31f-03e89b430146
 # ╠═de992a3c-c568-46a6-9555-48838ad7045e
 # ╠═b413c950-197f-11ed-2b4b-73333a1275ac
 # ╠═beaf95e8-10f0-4b34-be36-2ba7825a7d17
