@@ -6,19 +6,25 @@ using InteractiveUtils
 
 # ╔═╡ 4d5ceb64-18e2-40b6-b6ab-9a7befbe27b2
 begin
-	using LinearAlgebra: dot
+	using LinearAlgebra: LinearAlgebra, dot
 	using Test: @test
 end
 
+# ╔═╡ 2368d0f8-2316-4b2e-809d-7eac85d4633f
+
+
 # ╔═╡ e232fd87-92eb-4f82-8374-373d9b3d317c
-struct PackedUpperTriangular{T}
+struct PackedLowerTriangular{T}
 	data::Vector{T}
 end
 
 
+# ╔═╡ 9b629aba-73e8-49ba-b31f-03e89b430146
+
+
 # ╔═╡ de992a3c-c568-46a6-9555-48838ad7045e
 # eventually want to call LAPACK https://netlib.org/lapack/explore-html/d6/d30/group__single__blas__level2_gae6fb0355e398779dc593ced105ce373d.html#gae6fb0355e398779dc593ced105ce373d
-function \(A::PackedUpperTriangular{T}, v::Vector{T}) where T
+function \(A::PackedLowerTriangular{T}, v::Vector{T}) where T
 	n = length(v)
 	result = Vector{T}(undef, n)
 	p = 0
@@ -30,13 +36,16 @@ function \(A::PackedUpperTriangular{T}, v::Vector{T}) where T
 	return result
 end
 
+# ╔═╡ ec8c433a-ebd1-4691-aefb-ce62bd786e8a
+
+
 # ╔═╡ 72e4c649-5ef1-4f44-afe5-9365e239d97e
 
 
 # ╔═╡ b413c950-197f-11ed-2b4b-73333a1275ac
 begin
 	struct GaussianRandomField{T}
-		chol_cov::PackedUpperTriangular{T}
+		chol_cov::PackedLowerTriangular{T}
 	end
 	
 	function (rf::GaussianRandomField)(x) # evaluate random field at point x
@@ -44,24 +53,15 @@ begin
 	end
 end
 
-# ╔═╡ 99ab5b58-a340-4ee1-aaa0-6d280cbdfa3d
-
-
-# ╔═╡ d4b9fb89-c04e-46b2-851c-eb7a343a26ef
-a = [1,2,3]
-
-# ╔═╡ fc08c5e0-924f-4593-b571-30fa64e34c3f
-LinearAlgebra.dot(a[1:0], a[1:0])
-
-# ╔═╡ bad01da8-ce00-43ff-8e24-c958679389f2
-
-
 # ╔═╡ 99455ed7-7c20-4162-8967-c88c4bbabe23
 begin
-	packed = PackedUpperTriangular([1,1,1])
+	packed = PackedLowerTriangular([1,1,1])
 	@test packed\[2,2] == [2,0]
 	@test packed\[1,2] == [1,1]
 end
+
+# ╔═╡ 59cdb698-3e59-4ce9-9d00-467df0135fef
+
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -130,14 +130,14 @@ uuid = "8e850b90-86db-534c-a0d3-1478176c7d93"
 
 # ╔═╡ Cell order:
 # ╠═4d5ceb64-18e2-40b6-b6ab-9a7befbe27b2
+# ╠═2368d0f8-2316-4b2e-809d-7eac85d4633f
 # ╠═e232fd87-92eb-4f82-8374-373d9b3d317c
+# ╠═9b629aba-73e8-49ba-b31f-03e89b430146
 # ╠═de992a3c-c568-46a6-9555-48838ad7045e
+# ╠═ec8c433a-ebd1-4691-aefb-ce62bd786e8a
 # ╠═72e4c649-5ef1-4f44-afe5-9365e239d97e
 # ╠═b413c950-197f-11ed-2b4b-73333a1275ac
-# ╠═99ab5b58-a340-4ee1-aaa0-6d280cbdfa3d
-# ╠═d4b9fb89-c04e-46b2-851c-eb7a343a26ef
-# ╠═fc08c5e0-924f-4593-b571-30fa64e34c3f
-# ╠═bad01da8-ce00-43ff-8e24-c958679389f2
 # ╟─99455ed7-7c20-4162-8967-c88c4bbabe23
+# ╠═59cdb698-3e59-4ce9-9d00-467df0135fef
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
