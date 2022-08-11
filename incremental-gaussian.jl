@@ -8,7 +8,14 @@ using InteractiveUtils
 begin
 	using LinearAlgebra: LinearAlgebra, dot
 	using Test: @test
+	using Random: Random
 end
+
+# ╔═╡ 85316f5e-12ad-4aca-b1d4-9fc2a66d5469
+rng = Random.MersenneTwister(1234)
+
+# ╔═╡ 1d0075aa-5c04-4466-9325-37bb133cd37b
+
 
 # ╔═╡ 2368d0f8-2316-4b2e-809d-7eac85d4633f
 
@@ -36,22 +43,74 @@ function \(A::PackedLowerTriangular{T}, v::Vector{T}) where T
 	return result
 end
 
-# ╔═╡ ec8c433a-ebd1-4691-aefb-ce62bd786e8a
-
-
-# ╔═╡ 72e4c649-5ef1-4f44-afe5-9365e239d97e
-
-
 # ╔═╡ b413c950-197f-11ed-2b4b-73333a1275ac
 begin
-	struct GaussianRandomField{T}
+	mutable struct GaussianRandomField{T}
+		cov::Function
+		randomness::Vector{T}
+		evaluated_points::Array{T, 2}
 		chol_cov::PackedLowerTriangular{T}
+		evaluations::Vector{T}
+
+		GaussianRandomField{T}(cov::Function) where T = new(
+			cov
+		)
 	end
-	
-	function (rf::GaussianRandomField)(x) # evaluate random field at point x
-		rf
+
+	"""
+	evaluate random field at point x
+	"""
+	function (rf::GaussianRandomField{T})(x::Vector{T}) where {T}
+		try
+			cross_cov::Vector{T} = map(eachcol(rf.evaluated_points)) do pt
+				rf.cov(pt, x)
+			end
+			rf.evaluated_points = [rf.evaluated_points x]
+			coeff = rf.chol_cov \ cross_cov
+			cond_σ = sqrt(rf.cov(x,x) - dot(coeff, coeff))
+			push!(rf.chol_cov.data, coeff..., cond_σ)
+			push!(rf.randomness, randn(rng, T))
+			push!(
+				rf.evaluations, 
+				dot(coeff, rf.randomness[1:end-1]) + cond_σ * rf.randomness[end]
+			)
+		catch e
+			e isa UndefRefError || throw(e)
+			# unevaluated random field
+			rf.evaluated_points = reshape(x, :, 1)
+			rf.randomness = [randn(rng, T)]
+			σ = sqrt(rf.cov(x,x))
+			rf.chol_cov = PackedLowerTriangular{T}([σ])
+			rf.evaluations = [σ * rf.randomness[end]]
+		end
+		return rf.evaluations[end]
 	end
 end
+
+# ╔═╡ beaf95e8-10f0-4b34-be36-2ba7825a7d17
+function squaredExponentialKernel(x,y)
+	return exp(-LinearAlgebra.norm(x-y)^2/2)
+end
+
+# ╔═╡ 51be2a30-538d-4d10-bb69-53c0aac3d92f
+rf = GaussianRandomField{Float64}(squaredExponentialKernel)
+
+# ╔═╡ fe4bee1e-f0a3-4b2c-8be7-301647114d1a
+begin
+	rf([0.,])
+	rf([1.])
+	rf.evaluated_points
+	rf.evaluations
+end
+
+# ╔═╡ e83a078d-02b3-4c9f-a8cf-2bdeed5dbff0
+a = [1 2 ;3 4]
+
+# ╔═╡ 4f3b842c-e631-47c0-aa6c-f8a145be523a
+reshape(a, :,1)
+
+# ╔═╡ 4a88596a-0bb9-4a36-a663-aff609290f1f
+md"# Tests"
 
 # ╔═╡ 99455ed7-7c20-4162-8967-c88c4bbabe23
 begin
@@ -60,13 +119,11 @@ begin
 	@test packed\[1,2] == [1,1]
 end
 
-# ╔═╡ 59cdb698-3e59-4ce9-9d00-467df0135fef
-
-
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 """
 
@@ -130,14 +187,19 @@ uuid = "8e850b90-86db-534c-a0d3-1478176c7d93"
 
 # ╔═╡ Cell order:
 # ╠═4d5ceb64-18e2-40b6-b6ab-9a7befbe27b2
+# ╠═85316f5e-12ad-4aca-b1d4-9fc2a66d5469
+# ╠═1d0075aa-5c04-4466-9325-37bb133cd37b
 # ╠═2368d0f8-2316-4b2e-809d-7eac85d4633f
 # ╠═e232fd87-92eb-4f82-8374-373d9b3d317c
 # ╠═9b629aba-73e8-49ba-b31f-03e89b430146
 # ╠═de992a3c-c568-46a6-9555-48838ad7045e
-# ╠═ec8c433a-ebd1-4691-aefb-ce62bd786e8a
-# ╠═72e4c649-5ef1-4f44-afe5-9365e239d97e
 # ╠═b413c950-197f-11ed-2b4b-73333a1275ac
+# ╠═beaf95e8-10f0-4b34-be36-2ba7825a7d17
+# ╠═51be2a30-538d-4d10-bb69-53c0aac3d92f
+# ╠═fe4bee1e-f0a3-4b2c-8be7-301647114d1a
+# ╠═e83a078d-02b3-4c9f-a8cf-2bdeed5dbff0
+# ╠═4f3b842c-e631-47c0-aa6c-f8a145be523a
+# ╟─4a88596a-0bb9-4a36-a663-aff609290f1f
 # ╟─99455ed7-7c20-4162-8967-c88c4bbabe23
-# ╠═59cdb698-3e59-4ce9-9d00-467df0135fef
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
