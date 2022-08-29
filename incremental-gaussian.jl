@@ -85,6 +85,11 @@ begin
 		return rf.evaluations[end]
 	end
 
+	function (rf::GaussianRandomField{T})(x::T) where T
+		# ease of use for one dimensional random fields
+		return rf([x])
+	end
+
 	# function sizehint!(rf::GaussianRandomField, n)
 	# 	# TODO: use sizehint! on all fields
 	# end
@@ -102,7 +107,7 @@ rf = GaussianRandomField{Float64}(squaredExponentialKernel)
 x = 0:0.1:30
 
 # ╔═╡ a99bbd91-a5f1-4b21-bc63-90014d7b3914
-plot(x, [rf([pt]) for pt in x], show=true)
+plot(x, rf.(x), show=true)
 
 # ╔═╡ 4a88596a-0bb9-4a36-a663-aff609290f1f
 md"# Tests"
