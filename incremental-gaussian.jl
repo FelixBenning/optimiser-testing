@@ -38,14 +38,16 @@ end
 # ╔═╡ b413c950-197f-11ed-2b4b-73333a1275ac
 begin
 	mutable struct GaussianRandomField{T}
-		cov::Function
+		cov::Function		
+		jitter::T
 		randomness::Vector{T}
 		evaluated_points::Array{T, 2}
 		chol_cov::PackedLowerTriangular{T}
 		evaluations::Vector{T}
 
-		GaussianRandomField{T}(cov::Function) where T<:Number = new(
-			cov
+
+		GaussianRandomField{T}(cov::Function; jitter=10*eps(T)) where T<:Number = new(
+			cov, jitter
 		)
 	end
 
@@ -57,9 +59,10 @@ begin
 			coeff::Vector{T} = rf.chol_cov \ map(eachcol(rf.evaluated_points)) do pt
 				rf.cov(pt, x)
 			end
-			cond_var = rf.cov(x,x) - dot(coeff, coeff)
+			cond_var = rf.cov(x,x) - dot(coeff, coeff) + rf.jitter
 			if (cond_var <= 0)
-				# existing points determine new point (up to numeric errors) perfectly
+				@warn "existing points determine new point (up to numeric errors) perfectly. Maybe your evaluations are too close to each other. This can build up to sharp kinks when moving far enough away until there is real stochasticity again.
+				Increase the distance of your evaluation points or increase jitter"
 				return(dot(coeff, rf.randomness))
 			end
 			cond_σ = sqrt(cond_var)
@@ -96,10 +99,10 @@ end
 rf = GaussianRandomField{Float64}(squaredExponentialKernel)
 
 # ╔═╡ 310164cc-ad23-4db0-bcfe-ccf487d721ea
-x = 0:0.01:30
+x = 0:0.1:30
 
 # ╔═╡ a99bbd91-a5f1-4b21-bc63-90014d7b3914
-plot(x, [rf([pt]) for pt in x])
+plot(x, [rf([pt]) for pt in x], show=true)
 
 # ╔═╡ 4a88596a-0bb9-4a36-a663-aff609290f1f
 md"# Tests"
