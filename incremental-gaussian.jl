@@ -22,17 +22,59 @@ end
 
 
 # ╔═╡ de992a3c-c568-46a6-9555-48838ad7045e
-# eventually want to call LAPACK https://netlib.org/lapack/explore-html/d6/d30/group__single__blas__level2_gae6fb0355e398779dc593ced105ce373d.html#gae6fb0355e398779dc593ced105ce373d
-function \(A::PackedLowerTriangular{T}, v::Vector{T}) where T
-	n = length(v)
-	result = Vector{T}(undef, n)
-	p = 0
-	for idx in 0:(n-1)
-		result[idx+1] = 
-			(v[idx+1] - dot(result[1:idx], A.data[(p+1):p+idx]))/A.data[p+idx+1]
-		p += idx + 1
+begin
+	# eventually want to call LAPACK https://netlib.org/lapack/explore-html/d6/d30/group__single__blas__level2_gae6fb0355e398779dc593ced105ce373d.html#gae6fb0355e398779dc593ced105ce373d
+	function \(A::PackedLowerTriangular{T}, v::Vector{T}) where T
+		n = length(v)
+		result = Vector{T}(undef, n)
+		p = 0
+		for idx in 0:(n-1)
+			result[idx+1] = 
+				(v[idx+1] - dot(result[1:idx], A.data[(p+1):p+idx]))/A.data[p+idx+1]
+			p += idx + 1
+		end
+		return result
 	end
-	return result
+	
+	"""
+	solves A * X = B, where A is a PackedLowerTriangular matrix, and B is a matrix and returns X
+	"""
+	function \(A::PackedLowerTriangular{T}, B::Matrix{T}) where T
+		# possible LAPACK: https://netlib.org/lapack/explore-html/d1/df5/group__real_o_t_h_e_rcomputational_ga0f647463c7ff1c2f9bdd74cecfa263c5.html#ga0f647463c7ff1c2f9bdd74cecfa263c5
+		# (apparently loops over vectors as well)
+		return mapslices(x-> A\x, B, dims=[1])
+	end
+
+
+	"""
+	modify L to become
+
+	[
+		L  0
+		l^T l_0^T
+	]
+	where l is a matrix with the same number of rows as L and l_0 is an upper triangular matrix with the same number of columns as l.
+	
+	Notice how l, and l_0 are transposed because L is stored in row major format, while julia stores everything column major.
+	"""
+	function extend!(
+		L::PackedLowerTriangular{T}, 
+		l::Matrix{T}, 
+		l_0::LinearAlgebra.UpperTriangular{Float64, Matrix{Float64}}
+	) where T
+		append!(
+			L.data, 
+			reduce(
+				vcat, 
+				map(zip(
+					eachcol(l), 
+					map((i,col)-> col[1:i], enumerate(eachcol(l_0)))
+				)) do (x,y)
+					vcat(x,y)
+				end
+			)
+		)
+	end
 end
 
 # ╔═╡ b413c950-197f-11ed-2b4b-73333a1275ac
@@ -56,9 +98,11 @@ begin
 	"""
 	function (rf::GaussianRandomField{T})(x::Vector{T}) where {T}
 		try
-			coeff::Vector{T} = rf.chol_cov \ map(eachcol(rf.evaluated_points)) do pt
-				rf.cov(pt, x)
-			end
+			coeff::Matrix{T} = rf.chol_cov \ reduce(
+				vcat, map(eachcol(rf.evaluated_points)) do pt
+					rf.cov(pt, x)
+				end
+			)
 			cond_var = rf.cov(x,x) - dot(coeff, coeff) + rf.jitter
 			if (cond_var <= 0)
 				@warn "existing points determine new point (up to numeric errors) perfectly. Maybe your evaluations are too close to each other. This can build up to sharp kinks when moving far enough away until there is real stochasticity again.
@@ -77,10 +121,18 @@ begin
 			e isa UndefRefError || throw(e)
 			# unevaluated random field
 			rf.evaluated_points = reshape(x, :, 1)
-			rf.randomness = [randn(rng, T)]
-			σ = sqrt(rf.cov(x,x))
-			rf.chol_cov = PackedLowerTriangular{T}([σ])
-			rf.evaluations = [σ * rf.randomness[end]]
+			var = rf.cov(x,x)
+			outdim = size(var, 1)
+			
+			rf.randomness = randn(rng, T, (outdim,1))
+			var_chol = LinearAlgebra.cholesky(var)
+			rf.chol_cov = PackedLowerTriangular{T}([])
+			extend!(
+				rf.chol_cov, 
+				Matrix{T}(undef, (0, outdim)), 
+				var_chol.U
+			)
+			rf.evaluations = rf.chol_cov * rf.randomness[end]
 		end
 		return rf.evaluations[end]
 	end
@@ -99,6 +151,32 @@ end
 function squaredExponentialKernel(x,y)
 	return exp(-LinearAlgebra.norm(x-y)^2/2)
 end
+
+# ╔═╡ 6232f67a-181a-4bdb-a771-33cf8eae9462
+L = PackedLowerTriangular([1.,2,3])
+
+# ╔═╡ c2b4ef46-4a71-4ed1-b1d3-feea5a200db8
+a = [2. 1; 1 2]
+
+# ╔═╡ 28f3e90d-3835-45e5-90a4-76863af7824f
+extend!(L, a, LinearAlgebra.cholesky(a).U)
+
+# ╔═╡ 6ec59bb0-c8be-4f3b-937e-de8ba533db59
+LinearAlgebra.cholesky(a).U
+
+# ╔═╡ 8a985f3a-1b8d-4847-955f-8a73275919b9
+first(eachcol(LinearAlgebra.cholesky(a).U))[1:2]
+
+# ╔═╡ bd94386f-2ff7-4127-94be-7820497ff7ff
+map(enumerate(eachcol(LinearAlgebra.cholesky(a).U))) do (i, col)
+	col[1:i]
+end
+
+# ╔═╡ 76f7190b-eb79-4cfa-820f-9a8c67f27766
+a[4]
+
+# ╔═╡ fcebda40-585e-4dec-afd4-52c62908cc39
+mapslices(x->L\x, a, dims=[1])
 
 # ╔═╡ 51be2a30-538d-4d10-bb69-53c0aac3d92f
 rf = GaussianRandomField{Float64}(squaredExponentialKernel)
@@ -1080,6 +1158,14 @@ version = "1.4.1+0"
 # ╠═de992a3c-c568-46a6-9555-48838ad7045e
 # ╠═b413c950-197f-11ed-2b4b-73333a1275ac
 # ╠═beaf95e8-10f0-4b34-be36-2ba7825a7d17
+# ╠═28f3e90d-3835-45e5-90a4-76863af7824f
+# ╠═6ec59bb0-c8be-4f3b-937e-de8ba533db59
+# ╠═8a985f3a-1b8d-4847-955f-8a73275919b9
+# ╠═bd94386f-2ff7-4127-94be-7820497ff7ff
+# ╠═6232f67a-181a-4bdb-a771-33cf8eae9462
+# ╠═c2b4ef46-4a71-4ed1-b1d3-feea5a200db8
+# ╠═76f7190b-eb79-4cfa-820f-9a8c67f27766
+# ╠═fcebda40-585e-4dec-afd4-52c62908cc39
 # ╠═51be2a30-538d-4d10-bb69-53c0aac3d92f
 # ╠═310164cc-ad23-4db0-bcfe-ccf487d721ea
 # ╠═a99bbd91-a5f1-4b21-bc63-90014d7b3914
