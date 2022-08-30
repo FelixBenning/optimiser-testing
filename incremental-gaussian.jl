@@ -89,18 +89,19 @@ begin
 		l_0::LinearAlgebra.UpperTriangular{Float64, Matrix{Float64}}
 	) where T
 		# rewrite later with explicit allocation for efficiency
-		append!(
-			L.data,
-			reduce(
-				vcat,
-				map(
-					Base.splat(vcat),
-					zip(
-						eachcol(l), 
-						Iterators.map(enumerate(eachcol(l_0))) do (i, col)
-							col[1:i]
-						end
-					)
+		L_size, k = size(l)
+		@boundscheck L_size == size(L,1) || throw(
+			"The number of rows in L and l do not match")
+		@boundscheck k == size(l_0,1) || throw(
+			"The number of columns in l and l_0 do not match")
+		new_size = L_size + k
+		resize!(L.data, (new_size)*(new_size+1)÷ 2)
+		L.data[L_size*(L_size+1)÷ 2+1:end] .= Iterators.flatten(
+				Iterators.map(Iterators.flatten, zip(
+					eachcol(l), 
+					Iterators.map(enumerate(eachcol(l_0))) do (i, col)
+						col[1:i]
+					end
 				)
 			)
 		)
@@ -203,9 +204,6 @@ LinearAlgebra.cholesky(a).U
 
 # ╔═╡ 8a985f3a-1b8d-4847-955f-8a73275919b9
 first(eachcol(LinearAlgebra.cholesky(a).U))[1:2]
-
-# ╔═╡ 76f7190b-eb79-4cfa-820f-9a8c67f27766
-a[4]
 
 # ╔═╡ fcebda40-585e-4dec-afd4-52c62908cc39
 mapslices(x->L\x, a, dims=[1])
@@ -1200,7 +1198,6 @@ version = "1.4.1+0"
 # ╠═4f5d3973-89d1-4707-84b5-3f6d2ceb4d70
 # ╠═6232f67a-181a-4bdb-a771-33cf8eae9462
 # ╠═c2b4ef46-4a71-4ed1-b1d3-feea5a200db8
-# ╠═76f7190b-eb79-4cfa-820f-9a8c67f27766
 # ╠═fcebda40-585e-4dec-afd4-52c62908cc39
 # ╠═51be2a30-538d-4d10-bb69-53c0aac3d92f
 # ╠═310164cc-ad23-4db0-bcfe-ccf487d721ea
