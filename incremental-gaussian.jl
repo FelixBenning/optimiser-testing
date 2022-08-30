@@ -95,7 +95,7 @@ begin
 		@boundscheck k == size(l_0,1) || throw(
 			"The number of columns in l and l_0 do not match")
 		new_size = L_size + k
-		resize!(L.data, (new_size)*(new_size+1)÷ 2)
+		resize!(L.data, (new_size)*(new_size+1)÷ 2) # preallocation
 		L.data[L_size*(L_size+1)÷ 2+1:end] .= Iterators.flatten(
 				Iterators.map(Iterators.flatten, zip(
 					eachcol(l), 
@@ -187,23 +187,11 @@ end
 # ╔═╡ 6232f67a-181a-4bdb-a771-33cf8eae9462
 L = PackedLowerTriangular([1.,2,3])
 
-# ╔═╡ 8ed57b53-20b6-416d-8dc3-583c1fbf15cc
-size(L)
-
-# ╔═╡ 4f5d3973-89d1-4707-84b5-3f6d2ceb4d70
-L
-
 # ╔═╡ c2b4ef46-4a71-4ed1-b1d3-feea5a200db8
 a = [2. 1; 1 2]
 
 # ╔═╡ 28f3e90d-3835-45e5-90a4-76863af7824f
 extend!(L, a, LinearAlgebra.cholesky(a).U)
-
-# ╔═╡ 6ec59bb0-c8be-4f3b-937e-de8ba533db59
-LinearAlgebra.cholesky(a).U
-
-# ╔═╡ 8a985f3a-1b8d-4847-955f-8a73275919b9
-first(eachcol(LinearAlgebra.cholesky(a).U))[1:2]
 
 # ╔═╡ fcebda40-585e-4dec-afd4-52c62908cc39
 mapslices(x->L\x, a, dims=[1])
@@ -1192,10 +1180,6 @@ version = "1.4.1+0"
 # ╠═b413c950-197f-11ed-2b4b-73333a1275ac
 # ╠═beaf95e8-10f0-4b34-be36-2ba7825a7d17
 # ╠═28f3e90d-3835-45e5-90a4-76863af7824f
-# ╠═6ec59bb0-c8be-4f3b-937e-de8ba533db59
-# ╠═8a985f3a-1b8d-4847-955f-8a73275919b9
-# ╠═8ed57b53-20b6-416d-8dc3-583c1fbf15cc
-# ╠═4f5d3973-89d1-4707-84b5-3f6d2ceb4d70
 # ╠═6232f67a-181a-4bdb-a771-33cf8eae9462
 # ╠═c2b4ef46-4a71-4ed1-b1d3-feea5a200db8
 # ╠═fcebda40-585e-4dec-afd4-52c62908cc39
