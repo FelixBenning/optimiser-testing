@@ -16,13 +16,39 @@ end
 rng = Random.MersenneTwister(1234)
 
 # ╔═╡ e232fd87-92eb-4f82-8374-373d9b3d317c
-struct PackedLowerTriangular{T}
+struct PackedLowerTriangular{T} <: AbstractArray{T, 2}
 	data::Vector{T}
 end
 
 
 # ╔═╡ de992a3c-c568-46a6-9555-48838ad7045e
 begin
+	@inline function Base.size(L::PackedLowerTriangular{T}) where T
+		n = (isqrt(1 + 8*length(L.data)) - 1) ÷ 2 # length(L.data) = n(n+1)/2
+		return (n, n)
+	end
+	
+	@inline function Base.getindex(L::PackedLowerTriangular{T}, i::Int, j::Int) where T
+		@boundscheck checkbounds(L, i, j)
+		if(i < j) 
+			return 0
+		end
+		@inbounds return L.data[i*(i-1) ÷ 2 + j]
+	end
+
+	@inline function Base.setindex(L::PackedLowerTriangular{T}, x:: T, i::Int, j::Int) where T
+		@boundscheck checkbounds(L, i, j)
+		if i < j
+        	x == 0 || throw(ArgumentError(
+				"cannot set index in the upper triangular part " *
+            	"($i, $j) of a LowerTriangular matrix to a nonzero value ($x)")
+			)
+		else
+			@inbounds L.data[i*(i-1) ÷ 2 + j] = x
+		end
+		return L
+	end
+	
 	# eventually want to call LAPACK https://netlib.org/lapack/explore-html/d6/d30/group__single__blas__level2_gae6fb0355e398779dc593ced105ce373d.html#gae6fb0355e398779dc593ced105ce373d
 	function \(A::PackedLowerTriangular{T}, v::Vector{T}) where T
 		n = length(v)
@@ -160,6 +186,12 @@ end
 # ╔═╡ 6232f67a-181a-4bdb-a771-33cf8eae9462
 L = PackedLowerTriangular([1.,2,3])
 
+# ╔═╡ 8ed57b53-20b6-416d-8dc3-583c1fbf15cc
+size(L)
+
+# ╔═╡ 4f5d3973-89d1-4707-84b5-3f6d2ceb4d70
+L
+
 # ╔═╡ c2b4ef46-4a71-4ed1-b1d3-feea5a200db8
 a = [2. 1; 1 2]
 
@@ -213,7 +245,7 @@ Plots = "~1.31.7"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.7.1"
+julia_version = "1.7.3"
 manifest_format = "2.0"
 
 [[deps.Adapt]]
@@ -331,7 +363,7 @@ uuid = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
 version = "0.9.1"
 
 [[deps.Downloads]]
-deps = ["ArgTools", "LibCURL", "NetworkOptions"]
+deps = ["ArgTools", "FileWatching", "LibCURL", "NetworkOptions"]
 uuid = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
 
 [[deps.EarCut_jll]]
@@ -362,6 +394,9 @@ deps = ["Artifacts", "Bzip2_jll", "FreeType2_jll", "FriBidi_jll", "JLLWrappers",
 git-tree-sha1 = "ccd479984c7838684b3ac204b716c89955c76623"
 uuid = "b22a6f82-2f65-5046-a5b2-351ab43fb4e5"
 version = "4.4.2+0"
+
+[[deps.FileWatching]]
+uuid = "7b1f6079-737a-58dc-b8bc-7a2ca5c1b5ee"
 
 [[deps.FixedPointNumbers]]
 deps = ["Statistics"]
@@ -1161,6 +1196,8 @@ version = "1.4.1+0"
 # ╠═28f3e90d-3835-45e5-90a4-76863af7824f
 # ╠═6ec59bb0-c8be-4f3b-937e-de8ba533db59
 # ╠═8a985f3a-1b8d-4847-955f-8a73275919b9
+# ╠═8ed57b53-20b6-416d-8dc3-583c1fbf15cc
+# ╠═4f5d3973-89d1-4707-84b5-3f6d2ceb4d70
 # ╠═6232f67a-181a-4bdb-a771-33cf8eae9462
 # ╠═c2b4ef46-4a71-4ed1-b1d3-feea5a200db8
 # ╠═76f7190b-eb79-4cfa-820f-9a8c67f27766
