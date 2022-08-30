@@ -62,18 +62,23 @@ begin
 		l::Matrix{T}, 
 		l_0::LinearAlgebra.UpperTriangular{Float64, Matrix{Float64}}
 	) where T
+		# rewrite later with explicit allocation for efficiency
 		append!(
-			L.data, 
+			L.data,
 			reduce(
-				vcat, 
-				map(zip(
-					eachcol(l), 
-					map((i,col)-> col[1:i], enumerate(eachcol(l_0)))
-				)) do (x,y)
-					vcat(x,y)
-				end
+				vcat,
+				map(
+					Base.splat(vcat),
+					zip(
+						eachcol(l), 
+						Iterators.map(enumerate(eachcol(l_0))) do (i, col)
+							col[1:i]
+						end
+					)
+				)
 			)
 		)
+		return L
 	end
 end
 
@@ -166,11 +171,6 @@ LinearAlgebra.cholesky(a).U
 
 # ╔═╡ 8a985f3a-1b8d-4847-955f-8a73275919b9
 first(eachcol(LinearAlgebra.cholesky(a).U))[1:2]
-
-# ╔═╡ bd94386f-2ff7-4127-94be-7820497ff7ff
-map(enumerate(eachcol(LinearAlgebra.cholesky(a).U))) do (i, col)
-	col[1:i]
-end
 
 # ╔═╡ 76f7190b-eb79-4cfa-820f-9a8c67f27766
 a[4]
@@ -1161,7 +1161,6 @@ version = "1.4.1+0"
 # ╠═28f3e90d-3835-45e5-90a4-76863af7824f
 # ╠═6ec59bb0-c8be-4f3b-937e-de8ba533db59
 # ╠═8a985f3a-1b8d-4847-955f-8a73275919b9
-# ╠═bd94386f-2ff7-4127-94be-7820497ff7ff
 # ╠═6232f67a-181a-4bdb-a771-33cf8eae9462
 # ╠═c2b4ef46-4a71-4ed1-b1d3-feea5a200db8
 # ╠═76f7190b-eb79-4cfa-820f-9a8c67f27766
