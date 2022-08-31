@@ -6,10 +6,11 @@ using InteractiveUtils
 
 # ╔═╡ 4d5ceb64-18e2-40b6-b6ab-9a7befbe27b2
 begin
-	using LinearAlgebra: LinearAlgebra, dot
+	using LinearAlgebra: LinearAlgebra, dot, issuccess
 	using Test: @test
 	using Random: Random
 	using Plots: plot
+	using ElasticArrays
 end
 
 # ╔═╡ 85316f5e-12ad-4aca-b1d4-9fc2a66d5469
@@ -86,7 +87,7 @@ begin
 	function extend!(
 		L::PackedLowerTriangular{T}, 
 		l::Matrix{T}, 
-		l_0::Union{LinearAlgebra.UpperTriangular{T, Matrix{T}}}
+		l_0::LinearAlgebra.UpperTriangular{T, Matrix{T}}
 	) where {T<: Number}
 		L_size, k = size(l)
 		@boundscheck L_size == size(L,1) || throw(
@@ -109,12 +110,12 @@ end
 # ╔═╡ b413c950-197f-11ed-2b4b-73333a1275ac
 begin
 	mutable struct GaussianRandomField{T<:Number}
-		cov::Function		
+		cov::Function
 		jitter::T
-		randomness::Matrix{T}
-		evaluated_points::Array{T, 2}
+		outdim::Int
+		randomness::ElasticMatrix{T}
+		evaluated_points::ElasticMatrix{T}
 		chol_cov::PackedLowerTriangular{T}
-		evaluations::Vector{T}
 
 
 		GaussianRandomField{T}(cov::Function; jitter=10*eps(T)) where T<:Number = new(
@@ -122,48 +123,69 @@ begin
 		)
 	end
 
+	function covariance(rf::GaussianRandomField{T}, x) where T
+		mixed_cov = Matrix{T}(
+			undef, size(rf.evaluated_points,2)*rf.outdim, rf.outdim
+		)
+		for (idx, pt) in zip(
+			Iterators.countfrom(0, rf.outdim), 
+			eachcol(rf.evaluated_points)
+		)
+			mixed_cov[idx+1:idx+rf.outdim, :] .= rf.cov(pt, x)
+		end
+		return mixed_cov
+	end
+	
 	"""
 	evaluate random field at point x
 	"""
 	function (rf::GaussianRandomField{T})(x::Vector{T}) where {T}
 		try
-			coeff::Matrix{T} = rf.chol_cov \ reduce(
-				vcat, map(eachcol(rf.evaluated_points)) do pt
-					rf.cov(pt, x)
-				end
+			coeff::Matrix{T} = rf.chol_cov \ covariance(rf, x)
+
+			cond_expectation = reshape(
+				mapslices(coeff, dims=1) do col
+					dot(col, reshape(rf.randomness, :))
+				end,
+				:
 			)
-			cond_var = rf.cov(x,x) - dot(coeff, coeff) + rf.jitter
-			if (cond_var <= 0)
+			
+			cond_var = rf.cov(x,x) .- transpose(coeff)*coeff
+			cond_var[LinearAlgebra.diagind(cond_var)] .+= rf.jitter
+
+			cond_var_cholesky = LinearAlgebra.cholesky(cond_var, check=false)
+			if(!issuccess(cond_var_cholesky))
 				@warn "existing points determine new point (up to numeric errors) perfectly. Maybe your evaluations are too close to each other. This can build up to sharp kinks when moving far enough away until there is real stochasticity again.
 				Increase the distance of your evaluation points or increase jitter"
-				return(dot(coeff, rf.randomness))
+				return cond_expectation
 			end
-			cond_σ = sqrt(cond_var)
-			rf.evaluated_points = [rf.evaluated_points x]
-			push!(rf.chol_cov.data, coeff..., cond_σ)
-			push!(rf.randomness, randn(rng, T))
-			push!(
-				rf.evaluations, 
-				dot(coeff, rf.randomness[1:end-1]) + cond_σ * rf.randomness[end]
+			append!(rf.evaluated_points, reshape(x, :, 1))
+			extend!(
+				rf.chol_cov,
+				coeff,
+				cond_var_cholesky.U
 			)
+			new_randomness =  randn(rng, T, rf.outdim)
+			append!(rf.randomness, reshape(new_randomness, :, 1))
+			return cond_expectation + cond_var_cholesky.L * new_randomness
 		catch e
-			e isa UndefRefError || throw(e)
+			e isa UndefRefError || rethrow(e)
 			# unevaluated random field
 			rf.evaluated_points = reshape(x, :, 1)
 			var = rf.cov(x,x)
-			outdim = size(var, 1)
+			rf.outdim = size(var, 1)
 			
-			rf.randomness = randn(rng, T, (outdim,1))
+			rf.randomness = ElasticMatrix(randn(rng, T, (rf.outdim,1)))
 			var_chol = LinearAlgebra.cholesky(var)
 			rf.chol_cov = PackedLowerTriangular{T}([])
 			extend!(
 				rf.chol_cov, 
-				Matrix{T}(undef, (0, outdim)), 
+				Matrix{T}(undef, (0, rf.outdim)), 
 				var_chol.U
 			)
-			rf.evaluations = rf.chol_cov * rf.randomness[end]
+			return rf.chol_cov * reshape(rf.randomness, :)
 		end
-		return rf.evaluations[end]
+
 	end
 
 	function (rf::GaussianRandomField{T})(x::T) where T
@@ -181,24 +203,6 @@ function squaredExponentialKernel(x,y)
 	return exp(-LinearAlgebra.norm(x-y)^2/2)
 end
 
-# ╔═╡ 6232f67a-181a-4bdb-a771-33cf8eae9462
-L = PackedLowerTriangular([1.,2,3])
-
-# ╔═╡ 365769d1-fdd8-4340-b935-231d62e9aebf
-M = PackedLowerTriangular{Float64}([])
-
-# ╔═╡ 560360b2-ccbe-4a72-a34a-89039baaefe2
-extend!(M, Matrix{Float64}(undef, (0, 1)), LinearAlgebra.cholesky(1.).U)
-
-# ╔═╡ c2b4ef46-4a71-4ed1-b1d3-feea5a200db8
-a = [2. 1; 1 2]
-
-# ╔═╡ 28f3e90d-3835-45e5-90a4-76863af7824f
-extend!(L, a, LinearAlgebra.cholesky(a).U)
-
-# ╔═╡ fcebda40-585e-4dec-afd4-52c62908cc39
-mapslices(x->L\x, a, dims=[1])
-
 # ╔═╡ 51be2a30-538d-4d10-bb69-53c0aac3d92f
 rf = GaussianRandomField{Float64}(squaredExponentialKernel)
 
@@ -206,7 +210,7 @@ rf = GaussianRandomField{Float64}(squaredExponentialKernel)
 x = 0:0.1:30
 
 # ╔═╡ a99bbd91-a5f1-4b21-bc63-90014d7b3914
-plot(x, rf.(x), show=true)
+plot(x, vcat(rf.(x)...), show=true)
 
 # ╔═╡ 4a88596a-0bb9-4a36-a663-aff609290f1f
 md"# Tests"
@@ -221,12 +225,14 @@ end
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
+ElasticArrays = "fdbdab4c-e67f-52f5-8c3f-e7b388dad3d4"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
+ElasticArrays = "~1.2.10"
 Plots = "~1.31.7"
 """
 
@@ -360,6 +366,12 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "3f3a2501fa7236e9b911e0f7a588c657e822bb6d"
 uuid = "5ae413db-bbd1-5e63-b57d-d24a61df00f5"
 version = "2.2.3+0"
+
+[[deps.ElasticArrays]]
+deps = ["Adapt"]
+git-tree-sha1 = "d1933fd3e53e01e2d0ae98b8f7f65784e2d5430b"
+uuid = "fdbdab4c-e67f-52f5-8c3f-e7b388dad3d4"
+version = "1.2.10"
 
 [[deps.Expat_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1182,12 +1194,6 @@ version = "1.4.1+0"
 # ╠═de992a3c-c568-46a6-9555-48838ad7045e
 # ╠═b413c950-197f-11ed-2b4b-73333a1275ac
 # ╠═beaf95e8-10f0-4b34-be36-2ba7825a7d17
-# ╠═6232f67a-181a-4bdb-a771-33cf8eae9462
-# ╠═28f3e90d-3835-45e5-90a4-76863af7824f
-# ╠═365769d1-fdd8-4340-b935-231d62e9aebf
-# ╠═560360b2-ccbe-4a72-a34a-89039baaefe2
-# ╠═c2b4ef46-4a71-4ed1-b1d3-feea5a200db8
-# ╠═fcebda40-585e-4dec-afd4-52c62908cc39
 # ╠═51be2a30-538d-4d10-bb69-53c0aac3d92f
 # ╠═310164cc-ad23-4db0-bcfe-ccf487d721ea
 # ╠═a99bbd91-a5f1-4b21-bc63-90014d7b3914
