@@ -86,35 +86,32 @@ begin
 	function extend!(
 		L::PackedLowerTriangular{T}, 
 		l::Matrix{T}, 
-		l_0::LinearAlgebra.UpperTriangular{Float64, Matrix{Float64}}
-	) where T
-		# rewrite later with explicit allocation for efficiency
+		l_0::Union{LinearAlgebra.UpperTriangular{T, Matrix{T}}}
+	) where {T<: Number}
 		L_size, k = size(l)
 		@boundscheck L_size == size(L,1) || throw(
 			"The number of rows in L and l do not match")
 		@boundscheck k == size(l_0,1) || throw(
 			"The number of columns in l and l_0 do not match")
+
+		left = length(L.data)
 		new_size = L_size + k
 		resize!(L.data, (new_size)*(new_size+1)÷ 2) # preallocation
-		L.data[L_size*(L_size+1)÷ 2+1:end] .= Iterators.flatten(
-				Iterators.map(Iterators.flatten, zip(
-					eachcol(l), 
-					Iterators.map(enumerate(eachcol(l_0))) do (i, col)
-						col[1:i]
-					end
-				)
-			)
-		)
+		for (i, l_col) in enumerate(eachcol(l))
+			L.data[(left+1) : (left + L_size)] = l_col # add L_size elements
+			L.data[(left + L_size +1) : (left + L_size + i)] = l_0[1:i, i] # add i
+			left += L_size + i # this many elements where added
+		end
 		return L
 	end
 end
 
 # ╔═╡ b413c950-197f-11ed-2b4b-73333a1275ac
 begin
-	mutable struct GaussianRandomField{T}
+	mutable struct GaussianRandomField{T<:Number}
 		cov::Function		
 		jitter::T
-		randomness::Vector{T}
+		randomness::Matrix{T}
 		evaluated_points::Array{T, 2}
 		chol_cov::PackedLowerTriangular{T}
 		evaluations::Vector{T}
@@ -186,6 +183,12 @@ end
 
 # ╔═╡ 6232f67a-181a-4bdb-a771-33cf8eae9462
 L = PackedLowerTriangular([1.,2,3])
+
+# ╔═╡ 365769d1-fdd8-4340-b935-231d62e9aebf
+M = PackedLowerTriangular{Float64}([])
+
+# ╔═╡ 560360b2-ccbe-4a72-a34a-89039baaefe2
+extend!(M, Matrix{Float64}(undef, (0, 1)), LinearAlgebra.cholesky(1.).U)
 
 # ╔═╡ c2b4ef46-4a71-4ed1-b1d3-feea5a200db8
 a = [2. 1; 1 2]
@@ -1179,8 +1182,10 @@ version = "1.4.1+0"
 # ╠═de992a3c-c568-46a6-9555-48838ad7045e
 # ╠═b413c950-197f-11ed-2b4b-73333a1275ac
 # ╠═beaf95e8-10f0-4b34-be36-2ba7825a7d17
-# ╠═28f3e90d-3835-45e5-90a4-76863af7824f
 # ╠═6232f67a-181a-4bdb-a771-33cf8eae9462
+# ╠═28f3e90d-3835-45e5-90a4-76863af7824f
+# ╠═365769d1-fdd8-4340-b935-231d62e9aebf
+# ╠═560360b2-ccbe-4a72-a34a-89039baaefe2
 # ╠═c2b4ef46-4a71-4ed1-b1d3-feea5a200db8
 # ╠═fcebda40-585e-4dec-afd4-52c62908cc39
 # ╠═51be2a30-538d-4d10-bb69-53c0aac3d92f
