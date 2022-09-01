@@ -9,9 +9,11 @@ begin
 	using LinearAlgebra: LinearAlgebra, dot, issuccess
 	using Test: @test
 	using Random: Random
-	using Plots: plot
+	using Plots: plot, plot!
 	using ElasticArrays
 	using Zygote
+	using ProgressBars: ProgressBar
+	using Logging: Logging, SimpleLogger, with_logger
 end
 
 # ╔═╡ 85316f5e-12ad-4aca-b1d4-9fc2a66d5469
@@ -199,6 +201,95 @@ begin
 	# end
 end
 
+# ╔═╡ dd0059ba-5ffa-4031-afc4-b234955087a1
+begin
+	struct DiffGaussianRandomField{T<:Number}
+		rf::GaussianRandomField{T}
+		
+		DiffGaussianRandomField{T}(cov;jitter = 10*eps(T)) where T<: Number = new(
+			# modify cov/auto-diff here in the future
+			GaussianRandomField{T}(cov, jitter=jitter)
+		)
+	end
+
+
+
+	function (drf::DiffGaussianRandomField{T})(x::Union{T, Vector{T}}) where T
+		res = drf.rf(x)
+		return Dict(:val=> res[1], :gradient=>res[2:end])
+	end
+end
+
+# ╔═╡ a5ab4c31-4a85-484b-984e-0b72311368f3
+md"# Test 1-dim Gaussian Random Field"
+
+# ╔═╡ beaf95e8-10f0-4b34-be36-2ba7825a7d17
+function squaredExponentialKernel(x,y)
+	return exp(-LinearAlgebra.norm(x-y)^2/2)
+end
+
+# ╔═╡ 51be2a30-538d-4d10-bb69-53c0aac3d92f
+rf = GaussianRandomField{Float64}(squaredExponentialKernel)
+
+# ╔═╡ 310164cc-ad23-4db0-bcfe-ccf487d721ea
+x = -10:0.1:10
+
+# ╔═╡ a99bbd91-a5f1-4b21-bc63-90014d7b3914
+plot(x, vcat(rf.(x)...), show=true)
+
+# ╔═╡ 702178e1-d0b6-4b0e-bf47-3a31acb34b77
+md"# Test 2-dim Gaussian Random Field"
+
+# ╔═╡ 9399c1f7-4fd6-49fb-916c-8d099f4f87f6
+gaussKernel(x) = exp(-x^2/2)
+
+# ╔═╡ 7bca3318-658d-4907-a7e9-cf946e5f94b5
+function sqExpKernelWithGrad(x::AbstractVector{T},y::AbstractVector{T}) where {T<: Number}
+	d = x-y
+	dim = length(d)
+	result = Matrix{T}(undef, dim+1, dim+1)
+	result[1,1] = 1
+	result[2:end, 1] = - d
+	result[1, 2:end] = d
+	result[2:end, 2:end] = (LinearAlgebra.I - d * transpose(d))
+	return result * gaussKernel(LinearAlgebra.norm(d))
+end
+
+# ╔═╡ d85c6f84-91a1-4b90-a19a-c981ed331d5c
+pairs(x) = ( (a,b) for (k,a) in enumerate(x) for b in Iterators.drop(x, k) )
+
+# ╔═╡ 5e63220a-5bec-443b-b0a1-ebb20763ca1f
+begin
+	drf = DiffGaussianRandomField{Float64}(sqExpKernelWithGrad, jitter=0.00001)
+
+	discr = -5:0.5:5
+	grid = [drf([x,y]) for x in discr for y in discr]
+
+	
+
+	discr_fine = -5:0.1:5 # 0.1 takes 160seconds
+	drf.rf.jitter=10*eps(Float64) # causes points to be deterministic (stops problem size from increasing further)
+	grid_fine = with_logger(SimpleLogger(Logging.Error)) do 
+		# with disabled determinisitc result warning
+		[drf([x,y]) for y in discr_fine for x in discr_fine]
+	end
+	
+	plt = plot(
+		discr_fine, discr_fine, (x->x[:val]).(grid_fine),
+		seriestype=:contour
+	)
+	# plot!(plt, [0], [0], quiver=(drf([0.,0])[:gradient]), seriestype=:quiver)
+end
+
+# ╔═╡ 601ef169-392c-4c6b-857d-eb20139d4e81
+md"# Gradient Descent"
+
+# ╔═╡ 8bddd6fc-b434-41f3-b958-5cf33ee024fd
+
+
+# ╔═╡ dec8891d-4a6a-42cf-98b1-7b3f8540cabf
+md"# Auto-diff Experiments"
+
 # ╔═╡ 1e892c89-3518-4caf-9bd0-2add5a8c98c5
 function gradientKernel(kernel)
 	function new_kernel(x::Vector{T},y::Vector{T}) where {T<: Number}
@@ -212,11 +303,6 @@ function gradientKernel(kernel)
 	return new_kernel
 end
 
-# ╔═╡ beaf95e8-10f0-4b34-be36-2ba7825a7d17
-function squaredExponentialKernel(x,y)
-	return exp(-LinearAlgebra.norm(x-y)^2/2)
-end
-
 # ╔═╡ a2f9389c-9691-40a6-af30-3d6805e304e6
 k = gradientKernel(squaredExponentialKernel)
 
@@ -225,18 +311,6 @@ g_x(t, s) = gradient(z->squaredExponentialKernel(z,s), t)
 
 # ╔═╡ a23da749-815e-408e-9c38-40d0b02df6a6
 g_xy(x,y) = gradient(s-> g_x(x,s), y)
-
-# ╔═╡ 7bca3318-658d-4907-a7e9-cf946e5f94b5
-g_xy([0,0.],[1.,0])
-
-# ╔═╡ 51be2a30-538d-4d10-bb69-53c0aac3d92f
-rf = GaussianRandomField{Float64}(squaredExponentialKernel)
-
-# ╔═╡ 310164cc-ad23-4db0-bcfe-ccf487d721ea
-x = 0:0.1:30
-
-# ╔═╡ a99bbd91-a5f1-4b21-bc63-90014d7b3914
-plot(x, vcat(rf.(x)...), show=true)
 
 # ╔═╡ 4a88596a-0bb9-4a36-a663-aff609290f1f
 md"# Tests"
@@ -253,7 +327,9 @@ PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
 ElasticArrays = "fdbdab4c-e67f-52f5-8c3f-e7b388dad3d4"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+ProgressBars = "49802e3a-d2f1-5c88-81d8-b72133a6f568"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
@@ -261,6 +337,7 @@ Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 [compat]
 ElasticArrays = "~1.2.10"
 Plots = "~1.31.7"
+ProgressBars = "~1.4.1"
 Zygote = "~0.6.46"
 """
 
@@ -268,7 +345,7 @@ Zygote = "~0.6.46"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.7.3"
+julia_version = "1.7.1"
 manifest_format = "2.0"
 
 [[deps.AbstractFFTs]]
@@ -425,7 +502,7 @@ uuid = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
 version = "0.9.1"
 
 [[deps.Downloads]]
-deps = ["ArgTools", "FileWatching", "LibCURL", "NetworkOptions"]
+deps = ["ArgTools", "LibCURL", "NetworkOptions"]
 uuid = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
 
 [[deps.EarCut_jll]]
@@ -462,9 +539,6 @@ deps = ["Artifacts", "Bzip2_jll", "FreeType2_jll", "FriBidi_jll", "JLLWrappers",
 git-tree-sha1 = "ccd479984c7838684b3ac204b716c89955c76623"
 uuid = "b22a6f82-2f65-5046-a5b2-351ab43fb4e5"
 version = "4.4.2+0"
-
-[[deps.FileWatching]]
-uuid = "7b1f6079-737a-58dc-b8bc-7a2ca5c1b5ee"
 
 [[deps.FillArrays]]
 deps = ["LinearAlgebra", "Random", "SparseArrays", "Statistics"]
@@ -782,9 +856,9 @@ uuid = "d6f4376e-aef5-505a-96c1-9c027394607a"
 
 [[deps.MbedTLS]]
 deps = ["Dates", "MbedTLS_jll", "MozillaCACerts_jll", "Random", "Sockets"]
-git-tree-sha1 = "2f0be365951a88dfb084f754005177e6dfb00ed0"
+git-tree-sha1 = "ae6676d5f576ccd21b6789c2cbe2ba24fcc8075d"
 uuid = "739be429-bea8-5141-9913-cc70e7f3736d"
-version = "1.1.4"
+version = "1.1.5"
 
 [[deps.MbedTLS_jll]]
 deps = ["Artifacts", "Libdl"]
@@ -902,6 +976,12 @@ version = "1.3.0"
 [[deps.Printf]]
 deps = ["Unicode"]
 uuid = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+
+[[deps.ProgressBars]]
+deps = ["Printf"]
+git-tree-sha1 = "806ebc92e1b4b4f72192369a28dfcaf688566b2b"
+uuid = "49802e3a-d2f1-5c88-81d8-b72133a6f568"
+version = "1.4.1"
 
 [[deps.Qt5Base_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Fontconfig_jll", "Glib_jll", "JLLWrappers", "Libdl", "Libglvnd_jll", "OpenSSL_jll", "Pkg", "Xorg_libXext_jll", "Xorg_libxcb_jll", "Xorg_xcb_util_image_jll", "Xorg_xcb_util_keysyms_jll", "Xorg_xcb_util_renderutil_jll", "Xorg_xcb_util_wm_jll", "Zlib_jll", "xkbcommon_jll"]
@@ -1058,9 +1138,9 @@ uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [[deps.TranscodingStreams]]
 deps = ["Random", "Test"]
-git-tree-sha1 = "ed5d390c7addb70e90fd1eb783dcb9897922cbfa"
+git-tree-sha1 = "8a75929dcd3c38611db2f8d08546decb514fcadf"
 uuid = "3bb67fe8-82b1-5028-8e26-92a6c54297fa"
-version = "0.9.8"
+version = "0.9.9"
 
 [[deps.URIs]]
 git-tree-sha1 = "e59ecc5a41b000fa94423a578d29290c7266fc10"
@@ -1323,16 +1403,25 @@ version = "1.4.1+0"
 # ╟─85316f5e-12ad-4aca-b1d4-9fc2a66d5469
 # ╠═e232fd87-92eb-4f82-8374-373d9b3d317c
 # ╟─de992a3c-c568-46a6-9555-48838ad7045e
-# ╟─b413c950-197f-11ed-2b4b-73333a1275ac
-# ╠═1e892c89-3518-4caf-9bd0-2add5a8c98c5
-# ╠═a2f9389c-9691-40a6-af30-3d6805e304e6
-# ╠═e605e53f-ec00-4c21-bb1f-f694bf82a079
-# ╠═a23da749-815e-408e-9c38-40d0b02df6a6
-# ╠═7bca3318-658d-4907-a7e9-cf946e5f94b5
+# ╠═b413c950-197f-11ed-2b4b-73333a1275ac
+# ╠═dd0059ba-5ffa-4031-afc4-b234955087a1
+# ╟─a5ab4c31-4a85-484b-984e-0b72311368f3
 # ╠═beaf95e8-10f0-4b34-be36-2ba7825a7d17
 # ╠═51be2a30-538d-4d10-bb69-53c0aac3d92f
 # ╠═310164cc-ad23-4db0-bcfe-ccf487d721ea
 # ╠═a99bbd91-a5f1-4b21-bc63-90014d7b3914
+# ╟─702178e1-d0b6-4b0e-bf47-3a31acb34b77
+# ╠═9399c1f7-4fd6-49fb-916c-8d099f4f87f6
+# ╠═7bca3318-658d-4907-a7e9-cf946e5f94b5
+# ╠═d85c6f84-91a1-4b90-a19a-c981ed331d5c
+# ╠═5e63220a-5bec-443b-b0a1-ebb20763ca1f
+# ╟─601ef169-392c-4c6b-857d-eb20139d4e81
+# ╠═8bddd6fc-b434-41f3-b958-5cf33ee024fd
+# ╟─dec8891d-4a6a-42cf-98b1-7b3f8540cabf
+# ╠═1e892c89-3518-4caf-9bd0-2add5a8c98c5
+# ╠═a2f9389c-9691-40a6-af30-3d6805e304e6
+# ╠═e605e53f-ec00-4c21-bb1f-f694bf82a079
+# ╠═a23da749-815e-408e-9c38-40d0b02df6a6
 # ╟─4a88596a-0bb9-4a36-a663-aff609290f1f
 # ╟─99455ed7-7c20-4162-8967-c88c4bbabe23
 # ╟─00000000-0000-0000-0000-000000000001
