@@ -4,6 +4,16 @@
 using Markdown
 using InteractiveUtils
 
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
+        el
+    end
+end
+
 # ╔═╡ 4d5ceb64-18e2-40b6-b6ab-9a7befbe27b2
 begin
 	using LinearAlgebra: LinearAlgebra, dot, issuccess
@@ -12,8 +22,9 @@ begin
 	using Plots: plot, plot!
 	using ElasticArrays
 	using Zygote
-	using ProgressBars: ProgressBar
+	using ProgressLogging: @progress
 	using Logging: Logging, SimpleLogger, with_logger
+	using PlutoUI: Slider
 end
 
 # ╔═╡ 85316f5e-12ad-4aca-b1d4-9fc2a66d5469
@@ -216,7 +227,7 @@ begin
 
 	function (drf::DiffGaussianRandomField{T})(x::Union{T, Vector{T}}) where T
 		res = drf.rf(x)
-		return Dict(:val=> res[1], :gradient=>res[2:end])
+		return (val=res[1], gradient=res[2:end])
 	end
 end
 
@@ -281,11 +292,46 @@ begin
 	# plot!(plt, [0], [0], quiver=(drf([0.,0])[:gradient]), seriestype=:quiver)
 end
 
+# ╔═╡ 9dbbc977-7641-4a68-98bc-31d5e5847233
+plot!(plt, [0], [0], quiver=(drf([0.,0])[:gradient]), seriestype=:quiver)
+
 # ╔═╡ 601ef169-392c-4c6b-857d-eb20139d4e81
 md"# Gradient Descent"
 
-# ╔═╡ 8bddd6fc-b434-41f3-b958-5cf33ee024fd
+# ╔═╡ 0afd9204-d99b-444a-98b0-bb35886c88af
+tup = (a=1, b=2)
 
+# ╔═╡ 424b60c3-ff83-420f-90f6-503e1b03bb34
+dim=10
+
+# ╔═╡ 5fc2a003-0f07-4c0b-91a2-9cf99a7af62b
+@bind steps Slider(1:50, default=30, show_value=true)
+
+# ╔═╡ 8bddd6fc-b434-41f3-b958-5cf33ee024fd
+function gradientDescent(dim, steps)
+	high_dim_rf = DiffGaussianRandomField{Float64}(
+		sqExpKernelWithGrad, jitter=0.000001)
+
+	local position = zeros(dim)
+	vals = Vector{Float64}(undef, steps)
+	grads = Matrix{Float64}(undef, dim, steps)
+	for step in 1:steps
+		vals[step], grads[:,step] = high_dim_rf(position)
+		lr = 1/step
+		position -= lr * grads[:,step]/LinearAlgebra.norm(grads[:,step])
+	end
+	return vals, grads, high_dim_rf
+end
+
+# ╔═╡ 0402ec92-b8be-4e5f-8643-2d8382fc130e
+begin
+	gradPlot = plot()
+	@progress for _ in 1:20
+		vals, _, _ =  gradientDescent(dim, steps)
+		plot!(gradPlot, vals, label=nothing)
+	end
+	gradPlot
+end
 
 # ╔═╡ dec8891d-4a6a-42cf-98b1-7b3f8540cabf
 md"# Auto-diff Experiments"
@@ -329,7 +375,8 @@ ElasticArrays = "fdbdab4c-e67f-52f5-8c3f-e7b388dad3d4"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
-ProgressBars = "49802e3a-d2f1-5c88-81d8-b72133a6f568"
+PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
+ProgressLogging = "33c8b6b6-d38a-422a-b730-caa89a2f386c"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
@@ -337,7 +384,8 @@ Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 [compat]
 ElasticArrays = "~1.2.10"
 Plots = "~1.31.7"
-ProgressBars = "~1.4.1"
+PlutoUI = "~0.7.39"
+ProgressLogging = "~0.1.4"
 Zygote = "~0.6.46"
 """
 
@@ -353,6 +401,12 @@ deps = ["ChainRulesCore", "LinearAlgebra"]
 git-tree-sha1 = "69f7020bd72f069c219b5e8c236c1fa90d2cb409"
 uuid = "621f4979-c628-5d54-868e-fcf4e3e8185c"
 version = "1.2.1"
+
+[[deps.AbstractPlutoDingetjes]]
+deps = ["Pkg"]
+git-tree-sha1 = "8eaf9f1b4921132a4cff3f36a1d9ba923b14a481"
+uuid = "6e696c72-6542-2067-7265-42206c756150"
+version = "1.1.4"
 
 [[deps.Adapt]]
 deps = ["LinearAlgebra"]
@@ -658,6 +712,24 @@ deps = ["Artifacts", "Cairo_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll",
 git-tree-sha1 = "129acf094d168394e80ee1dc4bc06ec835e510a3"
 uuid = "2e76f6c2-a576-52d4-95c1-20adfe4de566"
 version = "2.8.1+1"
+
+[[deps.Hyperscript]]
+deps = ["Test"]
+git-tree-sha1 = "8d511d5b81240fc8e6802386302675bdf47737b9"
+uuid = "47d2ed2b-36de-50cf-bf87-49c2cf4b8b91"
+version = "0.0.4"
+
+[[deps.HypertextLiteral]]
+deps = ["Tricks"]
+git-tree-sha1 = "c47c5fa4c5308f27ccaac35504858d8914e102f9"
+uuid = "ac1192a8-f4b3-4bfe-ba22-af5b92cd3ab2"
+version = "0.9.4"
+
+[[deps.IOCapture]]
+deps = ["Logging", "Random"]
+git-tree-sha1 = "f7be53659ab06ddc986428d3a9dcc95f6fa6705a"
+uuid = "b5f81e59-6552-4d32-b1f0-c071b021bf89"
+version = "0.2.2"
 
 [[deps.IRTools]]
 deps = ["InteractiveUtils", "MacroTools", "Test"]
@@ -967,6 +1039,12 @@ git-tree-sha1 = "a19652399f43938413340b2068e11e55caa46b65"
 uuid = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 version = "1.31.7"
 
+[[deps.PlutoUI]]
+deps = ["AbstractPlutoDingetjes", "Base64", "ColorTypes", "Dates", "Hyperscript", "HypertextLiteral", "IOCapture", "InteractiveUtils", "JSON", "Logging", "Markdown", "Random", "Reexport", "UUIDs"]
+git-tree-sha1 = "8d1f54886b9037091edf146b517989fc4a09efec"
+uuid = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
+version = "0.7.39"
+
 [[deps.Preferences]]
 deps = ["TOML"]
 git-tree-sha1 = "47e5f437cc0e7ef2ce8406ce1e7e24d44915f88d"
@@ -977,11 +1055,11 @@ version = "1.3.0"
 deps = ["Unicode"]
 uuid = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 
-[[deps.ProgressBars]]
-deps = ["Printf"]
-git-tree-sha1 = "806ebc92e1b4b4f72192369a28dfcaf688566b2b"
-uuid = "49802e3a-d2f1-5c88-81d8-b72133a6f568"
-version = "1.4.1"
+[[deps.ProgressLogging]]
+deps = ["Logging", "SHA", "UUIDs"]
+git-tree-sha1 = "80d919dee55b9c50e8d9e2da5eeafff3fe58b539"
+uuid = "33c8b6b6-d38a-422a-b730-caa89a2f386c"
+version = "0.1.4"
 
 [[deps.Qt5Base_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Fontconfig_jll", "Glib_jll", "JLLWrappers", "Libdl", "Libglvnd_jll", "OpenSSL_jll", "Pkg", "Xorg_libXext_jll", "Xorg_libxcb_jll", "Xorg_xcb_util_image_jll", "Xorg_xcb_util_keysyms_jll", "Xorg_xcb_util_renderutil_jll", "Xorg_xcb_util_wm_jll", "Zlib_jll", "xkbcommon_jll"]
@@ -1141,6 +1219,11 @@ deps = ["Random", "Test"]
 git-tree-sha1 = "8a75929dcd3c38611db2f8d08546decb514fcadf"
 uuid = "3bb67fe8-82b1-5028-8e26-92a6c54297fa"
 version = "0.9.9"
+
+[[deps.Tricks]]
+git-tree-sha1 = "6bac775f2d42a611cdfcd1fb217ee719630c4175"
+uuid = "410a4b4d-49e4-4fbc-ab6d-cb71b17b3775"
+version = "0.1.6"
 
 [[deps.URIs]]
 git-tree-sha1 = "e59ecc5a41b000fa94423a578d29290c7266fc10"
@@ -1415,8 +1498,13 @@ version = "1.4.1+0"
 # ╠═7bca3318-658d-4907-a7e9-cf946e5f94b5
 # ╠═d85c6f84-91a1-4b90-a19a-c981ed331d5c
 # ╠═5e63220a-5bec-443b-b0a1-ebb20763ca1f
+# ╠═9dbbc977-7641-4a68-98bc-31d5e5847233
 # ╟─601ef169-392c-4c6b-857d-eb20139d4e81
+# ╠═0afd9204-d99b-444a-98b0-bb35886c88af
+# ╠═424b60c3-ff83-420f-90f6-503e1b03bb34
+# ╠═5fc2a003-0f07-4c0b-91a2-9cf99a7af62b
 # ╠═8bddd6fc-b434-41f3-b958-5cf33ee024fd
+# ╠═0402ec92-b8be-4e5f-8643-2d8382fc130e
 # ╟─dec8891d-4a6a-42cf-98b1-7b3f8540cabf
 # ╠═1e892c89-3518-4caf-9bd0-2add5a8c98c5
 # ╠═a2f9389c-9691-40a6-af30-3d6805e304e6
