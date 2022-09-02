@@ -197,18 +197,6 @@ begin
 	# end
 end
 
-# ╔═╡ 3d048959-ce65-49fc-9a05-3b470e4910fb
-A = [1 2; 3 4]
-
-# ╔═╡ 2ca72cf2-1fae-44db-9d93-fce078229a61
-a = [1, 2]
-
-# ╔═╡ 56a8e0b8-b5d0-4c0d-bbbc-4340c593e867
-mapslices(x->LinearAlgebra.norm(x)^2, A, dims=1)
-
-# ╔═╡ 7775fcb4-c296-4006-bf2c-3d8414582cc9
-transpose(a) * A
-
 # ╔═╡ dd0059ba-5ffa-4031-afc4-b234955087a1
 begin
 	struct DiffGaussianRandomField{T<:Number}
@@ -296,7 +284,7 @@ plot!(plt, [0], [0], quiver=(drf([0.,0])[:gradient]), seriestype=:quiver)
 md"# Gradient Descent"
 
 # ╔═╡ 424b60c3-ff83-420f-90f6-503e1b03bb34
-dim= 30
+dim= 100
 
 # ╔═╡ 5fc2a003-0f07-4c0b-91a2-9cf99a7af62b
 steps = 30
@@ -1504,10 +1492,6 @@ version = "1.4.1+0"
 # ╠═e232fd87-92eb-4f82-8374-373d9b3d317c
 # ╠═de992a3c-c568-46a6-9555-48838ad7045e
 # ╠═b413c950-197f-11ed-2b4b-73333a1275ac
-# ╠═3d048959-ce65-49fc-9a05-3b470e4910fb
-# ╠═2ca72cf2-1fae-44db-9d93-fce078229a61
-# ╠═56a8e0b8-b5d0-4c0d-bbbc-4340c593e867
-# ╠═7775fcb4-c296-4006-bf2c-3d8414582cc9
 # ╠═dd0059ba-5ffa-4031-afc4-b234955087a1
 # ╟─a5ab4c31-4a85-484b-984e-0b72311368f3
 # ╠═beaf95e8-10f0-4b34-be36-2ba7825a7d17
