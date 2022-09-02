@@ -4,16 +4,6 @@
 using Markdown
 using InteractiveUtils
 
-# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
-macro bind(def, element)
-    quote
-        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
-        local el = $(esc(element))
-        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
-        el
-    end
-end
-
 # ╔═╡ 4d5ceb64-18e2-40b6-b6ab-9a7befbe27b2
 begin
 	using LinearAlgebra: LinearAlgebra, dot, issuccess
@@ -157,12 +147,7 @@ begin
 		try
 			coeff::Matrix{T} = rf.chol_cov \ covariance(rf, x)
 
-			cond_expectation = reshape(
-				mapslices(coeff, dims=1) do col
-					dot(col, reshape(rf.randomness, :))
-				end,
-				:
-			)
+			cond_expectation = reshape(reshape(rf.randomness, 1, :) * coeff, :)
 			
 			cond_var = rf.cov(x,x) .- transpose(coeff)*coeff
 			cond_var[LinearAlgebra.diagind(cond_var)] .+= rf.jitter
@@ -211,6 +196,18 @@ begin
 	# 	# TODO: use sizehint! on all fields
 	# end
 end
+
+# ╔═╡ 3d048959-ce65-49fc-9a05-3b470e4910fb
+A = [1 2; 3 4]
+
+# ╔═╡ 2ca72cf2-1fae-44db-9d93-fce078229a61
+a = [1, 2]
+
+# ╔═╡ 56a8e0b8-b5d0-4c0d-bbbc-4340c593e867
+mapslices(x->LinearAlgebra.norm(x)^2, A, dims=1)
+
+# ╔═╡ 7775fcb4-c296-4006-bf2c-3d8414582cc9
+transpose(a) * A
 
 # ╔═╡ dd0059ba-5ffa-4031-afc4-b234955087a1
 begin
@@ -298,27 +295,26 @@ plot!(plt, [0], [0], quiver=(drf([0.,0])[:gradient]), seriestype=:quiver)
 # ╔═╡ 601ef169-392c-4c6b-857d-eb20139d4e81
 md"# Gradient Descent"
 
-# ╔═╡ 0afd9204-d99b-444a-98b0-bb35886c88af
-tup = (a=1, b=2)
-
 # ╔═╡ 424b60c3-ff83-420f-90f6-503e1b03bb34
-dim=10
+dim= 30
 
 # ╔═╡ 5fc2a003-0f07-4c0b-91a2-9cf99a7af62b
-@bind steps Slider(1:50, default=30, show_value=true)
+steps = 30
 
 # ╔═╡ 8bddd6fc-b434-41f3-b958-5cf33ee024fd
 function gradientDescent(dim, steps)
 	high_dim_rf = DiffGaussianRandomField{Float64}(
-		sqExpKernelWithGrad, jitter=0.000001)
+		sqExpKernelWithGrad, jitter=0.00001)
 
 	local position = zeros(dim)
 	vals = Vector{Float64}(undef, steps)
 	grads = Matrix{Float64}(undef, dim, steps)
 	for step in 1:steps
 		vals[step], grads[:,step] = high_dim_rf(position)
-		lr = 1/step
-		position -= lr * grads[:,step]/LinearAlgebra.norm(grads[:,step])
+		g_norm = LinearAlgebra.norm(grads[:,step])
+		a = vals[step]/(2*g_norm)
+		lr = a + sqrt(a^2 + 1)
+		position -= lr * grads[:,step]/g_norm
 	end
 	return vals, grads, high_dim_rf
 end
@@ -326,12 +322,30 @@ end
 # ╔═╡ 0402ec92-b8be-4e5f-8643-2d8382fc130e
 begin
 	gradPlot = plot()
-	@progress for _ in 1:20
+	@progress for _ in 1:5
 		vals, _, _ =  gradientDescent(dim, steps)
 		plot!(gradPlot, vals, label=nothing)
 	end
 	gradPlot
 end
+
+# ╔═╡ 11a92e07-aa82-4f04-adda-d7227858061e
+begin
+	orthPlot = plot()
+	vals, grads, _ = gradientDescent(dim, steps)
+	local grid = reshape(
+		[
+			dot(g1, g2)/(LinearAlgebra.norm(g1)*LinearAlgebra.norm(g2))
+			for g1 in eachcol(grads) for g2 in eachcol(grads)
+		], 
+		size(grads, 2), :
+	)
+	plot!(grid, seriestype=:heatmap)
+	plot(vals, label=nothing)
+end
+
+# ╔═╡ 68e7f3bf-e06e-4440-af93-b7e6fe54379d
+orthPlot
 
 # ╔═╡ dec8891d-4a6a-42cf-98b1-7b3f8540cabf
 md"# Auto-diff Experiments"
@@ -393,7 +407,7 @@ Zygote = "~0.6.46"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.7.1"
+julia_version = "1.7.3"
 manifest_format = "2.0"
 
 [[deps.AbstractFFTs]]
@@ -556,7 +570,7 @@ uuid = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
 version = "0.9.1"
 
 [[deps.Downloads]]
-deps = ["ArgTools", "LibCURL", "NetworkOptions"]
+deps = ["ArgTools", "FileWatching", "LibCURL", "NetworkOptions"]
 uuid = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
 
 [[deps.EarCut_jll]]
@@ -593,6 +607,9 @@ deps = ["Artifacts", "Bzip2_jll", "FreeType2_jll", "FriBidi_jll", "JLLWrappers",
 git-tree-sha1 = "ccd479984c7838684b3ac204b716c89955c76623"
 uuid = "b22a6f82-2f65-5046-a5b2-351ab43fb4e5"
 version = "4.4.2+0"
+
+[[deps.FileWatching]]
+uuid = "7b1f6079-737a-58dc-b8bc-7a2ca5c1b5ee"
 
 [[deps.FillArrays]]
 deps = ["LinearAlgebra", "Random", "SparseArrays", "Statistics"]
@@ -1485,8 +1502,12 @@ version = "1.4.1+0"
 # ╠═4d5ceb64-18e2-40b6-b6ab-9a7befbe27b2
 # ╟─85316f5e-12ad-4aca-b1d4-9fc2a66d5469
 # ╠═e232fd87-92eb-4f82-8374-373d9b3d317c
-# ╟─de992a3c-c568-46a6-9555-48838ad7045e
+# ╠═de992a3c-c568-46a6-9555-48838ad7045e
 # ╠═b413c950-197f-11ed-2b4b-73333a1275ac
+# ╠═3d048959-ce65-49fc-9a05-3b470e4910fb
+# ╠═2ca72cf2-1fae-44db-9d93-fce078229a61
+# ╠═56a8e0b8-b5d0-4c0d-bbbc-4340c593e867
+# ╠═7775fcb4-c296-4006-bf2c-3d8414582cc9
 # ╠═dd0059ba-5ffa-4031-afc4-b234955087a1
 # ╟─a5ab4c31-4a85-484b-984e-0b72311368f3
 # ╠═beaf95e8-10f0-4b34-be36-2ba7825a7d17
@@ -1500,11 +1521,12 @@ version = "1.4.1+0"
 # ╠═5e63220a-5bec-443b-b0a1-ebb20763ca1f
 # ╠═9dbbc977-7641-4a68-98bc-31d5e5847233
 # ╟─601ef169-392c-4c6b-857d-eb20139d4e81
-# ╠═0afd9204-d99b-444a-98b0-bb35886c88af
 # ╠═424b60c3-ff83-420f-90f6-503e1b03bb34
 # ╠═5fc2a003-0f07-4c0b-91a2-9cf99a7af62b
 # ╠═8bddd6fc-b434-41f3-b958-5cf33ee024fd
 # ╠═0402ec92-b8be-4e5f-8643-2d8382fc130e
+# ╠═11a92e07-aa82-4f04-adda-d7227858061e
+# ╠═68e7f3bf-e06e-4440-af93-b7e6fe54379d
 # ╟─dec8891d-4a6a-42cf-98b1-7b3f8540cabf
 # ╠═1e892c89-3518-4caf-9bd0-2add5a8c98c5
 # ╠═a2f9389c-9691-40a6-af30-3d6805e304e6
