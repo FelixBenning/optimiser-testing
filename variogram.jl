@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.8
+# v0.19.15
 
 using Markdown
 using InteractiveUtils
@@ -27,9 +27,15 @@ end
 
 # ╔═╡ 909214e2-0320-4ddf-b146-b9d2b793355e
 begin
-	using Plots: plot, plot!
+	using Plots: plot, plot!, histogram
 	using Unzip: unzip
 end
+
+# ╔═╡ 10fd8d8e-a27e-48dd-9db0-73bdb7b55607
+using Distributions
+
+# ╔═╡ 2289f8cf-489c-4488-a61f-2b9d8ff28616
+using QuadGK
 
 # ╔═╡ 6c708a17-4293-499a-88a2-368e29bb8f4d
 MNIST.download(i_accept_the_terms_of_use=true)
@@ -142,6 +148,9 @@ end
 # ╔═╡ 5b77abfe-bda2-43ea-b748-e703640c01fa
 sort(vec(var_points), by= varPt->varPt.distance)
 
+# ╔═╡ 8a462693-2f7f-4826-a594-c7ed80a1f732
+histogram(map(pt->pt.distance, vec(var_points)))
+
 # ╔═╡ 71beb874-da12-43dc-be47-5be439963ff2
 x_range = 0:0.1:h_end
 
@@ -213,25 +222,56 @@ Flux.functor(sqExpVariogram(1,2))[1]
 # ╔═╡ cc2fa330-e318-46d3-9e8a-15f5138252ee
 Flux.params(sqExpVariogram(1,2))
 
+# ╔═╡ 9950d5b4-d303-4d52-9cf5-50820f459b99
+md"# Beta Distribution Sum"
+
+# ╔═╡ 0840164f-fc0c-483d-92e7-92f12c98f6b5
+@bind alpha Slider(0.01:0.01:1, default=0.5, show_value=true)
+
+# ╔═╡ 94d5ee35-656b-4f6d-a5f1-cb6c321fc119
+beta = alpha
+
+# ╔═╡ 9326265c-4608-43a8-a67b-f658e177cf5e
+x = range(0.01,0.99, 100)
+
+# ╔═╡ 6e5710b0-7d68-4e29-9c28-ec2c3393ed04
+b_plt = plot(x, pdf.(Beta(alpha, beta), x))
+
+# ╔═╡ b8e340f5-4825-497c-949c-502af6fa9725
+function conv(d::Distribution{Univariate, Continuous}, x)
+	function f(y)
+		ret = pdf(d, x-y)*pdf(d, y)
+		return isinf(ret) | isnan(ret) ? 0 : ret
+	end
+	return quadgk(f, 0, 2, rtol=1e-8)[1]
+end
+
+# ╔═╡ 613f0088-5a5e-4023-9856-8747b0f28c2b
+plot!(b_plt, x, 2*conv.(Beta(alpha,beta), 2*x))
+
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 MLDatasets = "eb30cadb-4394-5ae3-aed4-317e484a6458"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
+QuadGK = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 Unzip = "41fe7b60-77ed-43a1-b4f0-825fd5a5650d"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [compat]
 DataFrames = "~1.3.4"
+Distributions = "~0.25.77"
 Flux = "~0.13.3"
 MLDatasets = "~0.7.1"
 Plots = "~1.29.0"
 PlutoUI = "~0.7.39"
+QuadGK = "~2.6.0"
 Unzip = "~0.1.2"
 Zygote = "~0.6.40"
 """
@@ -240,7 +280,7 @@ Zygote = "~0.6.40"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.7.1"
+julia_version = "1.7.3"
 manifest_format = "2.0"
 
 [[deps.AbstractFFTs]]
@@ -350,6 +390,12 @@ deps = ["Artifacts", "Bzip2_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll",
 git-tree-sha1 = "4b859a208b2397a7a623a03449e4636bdb17bcf2"
 uuid = "83423d85-b0ee-5818-9007-b63ccbeb887a"
 version = "1.16.1+1"
+
+[[deps.Calculus]]
+deps = ["LinearAlgebra"]
+git-tree-sha1 = "f641eb0a4f00c343bbc32346e1217b86f3ce9dad"
+uuid = "49dc2e85-a5d0-5ad3-a950-438e2897f1b9"
+version = "0.5.1"
 
 [[deps.ChainRules]]
 deps = ["ChainRulesCore", "Compat", "IrrationalConstants", "LinearAlgebra", "Random", "RealDot", "SparseArrays", "Statistics"]
@@ -484,6 +530,12 @@ version = "0.1.2"
 deps = ["Mmap"]
 uuid = "8bb1440f-4735-579b-a4ab-409b98df4dab"
 
+[[deps.DensityInterface]]
+deps = ["InverseFunctions", "Test"]
+git-tree-sha1 = "80c3e8639e3353e5d2912fb3a1916b8455e2494b"
+uuid = "b429d917-457f-4dbc-8f4c-0cc954292b1d"
+version = "0.4.0"
+
 [[deps.DiffResults]]
 deps = ["StaticArrays"]
 git-tree-sha1 = "c18e98cba888c6c25d1c3b048e4b3380ca956805"
@@ -500,6 +552,12 @@ version = "1.11.0"
 deps = ["Random", "Serialization", "Sockets"]
 uuid = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 
+[[deps.Distributions]]
+deps = ["ChainRulesCore", "DensityInterface", "FillArrays", "LinearAlgebra", "PDMats", "Printf", "QuadGK", "Random", "SparseArrays", "SpecialFunctions", "Statistics", "StatsBase", "StatsFuns", "Test"]
+git-tree-sha1 = "bee795cdeabc7601776abbd6b9aac2ca62429966"
+uuid = "31c24e10-a181-5473-b8eb-7969acd0382f"
+version = "0.25.77"
+
 [[deps.DocStringExtensions]]
 deps = ["LibGit2"]
 git-tree-sha1 = "b19534d1895d702889b219c382a6e18010797f0b"
@@ -507,8 +565,14 @@ uuid = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
 version = "0.8.6"
 
 [[deps.Downloads]]
-deps = ["ArgTools", "LibCURL", "NetworkOptions"]
+deps = ["ArgTools", "FileWatching", "LibCURL", "NetworkOptions"]
 uuid = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
+
+[[deps.DualNumbers]]
+deps = ["Calculus", "NaNMath", "SpecialFunctions"]
+git-tree-sha1 = "5837a837389fccf076445fce071c8ddaea35a566"
+uuid = "fa6b7ba4-c1ee-5f82-b5fc-ecf0adba8f74"
+version = "0.6.8"
 
 [[deps.EarCut_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -562,6 +626,9 @@ deps = ["Compat", "Dates", "Mmap", "Printf", "Test", "UUIDs"]
 git-tree-sha1 = "129b104185df66e408edd6625d480b7f9e9823a0"
 uuid = "48062228-2e41-5def-b9a4-89aafe57970f"
 version = "0.9.18"
+
+[[deps.FileWatching]]
+uuid = "7b1f6079-737a-58dc-b8bc-7a2ca5c1b5ee"
 
 [[deps.FillArrays]]
 deps = ["LinearAlgebra", "Random", "SparseArrays", "Statistics"]
@@ -730,6 +797,12 @@ deps = ["Artifacts", "Cairo_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll",
 git-tree-sha1 = "129acf094d168394e80ee1dc4bc06ec835e510a3"
 uuid = "2e76f6c2-a576-52d4-95c1-20adfe4de566"
 version = "2.8.1+1"
+
+[[deps.HypergeometricFunctions]]
+deps = ["DualNumbers", "LinearAlgebra", "OpenLibm_jll", "SpecialFunctions", "Test"]
+git-tree-sha1 = "709d864e3ed6e3545230601f94e11ebc65994641"
+uuid = "34004b35-14d8-5ef3-9330-4cdb6864b03a"
+version = "0.3.11"
 
 [[deps.Hyperscript]]
 deps = ["Test"]
@@ -1160,6 +1233,12 @@ git-tree-sha1 = "b2a7af664e098055a7529ad1a900ded962bca488"
 uuid = "2f80f16e-611a-54ab-bc61-aa92de5b98fc"
 version = "8.44.0+0"
 
+[[deps.PDMats]]
+deps = ["LinearAlgebra", "SparseArrays", "SuiteSparse"]
+git-tree-sha1 = "cf494dca75a69712a72b80bc48f59dcf3dea63ec"
+uuid = "90014a1f-27ba-587c-ab20-58faa44d9150"
+version = "0.11.16"
+
 [[deps.PaddedViews]]
 deps = ["OffsetArrays"]
 git-tree-sha1 = "03a7a85b76381a3d04c7a1656039197e70eda03d"
@@ -1247,9 +1326,15 @@ version = "0.1.4"
 
 [[deps.Qt5Base_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Fontconfig_jll", "Glib_jll", "JLLWrappers", "Libdl", "Libglvnd_jll", "OpenSSL_jll", "Pkg", "Xorg_libXext_jll", "Xorg_libxcb_jll", "Xorg_xcb_util_image_jll", "Xorg_xcb_util_keysyms_jll", "Xorg_xcb_util_renderutil_jll", "Xorg_xcb_util_wm_jll", "Zlib_jll", "xkbcommon_jll"]
-git-tree-sha1 = "c6c0f690d0cc7caddb74cef7aa847b824a16b256"
+git-tree-sha1 = "0c03844e2231e12fda4d0086fd7cbe4098ee8dc5"
 uuid = "ea2cea3b-5b76-57ae-a6ef-0a8af62496e1"
-version = "5.15.3+1"
+version = "5.15.3+2"
+
+[[deps.QuadGK]]
+deps = ["DataStructures", "LinearAlgebra"]
+git-tree-sha1 = "97aa253e65b784fd13e83774cadc95b38011d734"
+uuid = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
+version = "2.6.0"
 
 [[deps.REPL]]
 deps = ["InteractiveUtils", "Markdown", "Sockets", "Unicode"]
@@ -1304,6 +1389,18 @@ deps = ["UUIDs"]
 git-tree-sha1 = "838a3a4188e2ded87a4f9f184b4b0d78a1e91cb7"
 uuid = "ae029012-a4dd-5104-9daa-d747884805df"
 version = "1.3.0"
+
+[[deps.Rmath]]
+deps = ["Random", "Rmath_jll"]
+git-tree-sha1 = "bf3188feca147ce108c76ad82c2792c57abe7b1f"
+uuid = "79098fc4-a85e-5d69-aa6a-4863f24498fa"
+version = "0.7.0"
+
+[[deps.Rmath_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "68db32dff12bb6127bac73c209881191bf0efbb7"
+uuid = "f50d1b31-88e8-58de-be2c-1cc44531875f"
+version = "0.3.0+0"
 
 [[deps.SHA]]
 uuid = "ea8e919c-243c-51af-8825-aaa63cd721ce"
@@ -1402,6 +1499,12 @@ deps = ["DataAPI", "DataStructures", "LinearAlgebra", "LogExpFunctions", "Missin
 git-tree-sha1 = "8977b17906b0a1cc74ab2e3a05faa16cf08a8291"
 uuid = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 version = "0.33.16"
+
+[[deps.StatsFuns]]
+deps = ["ChainRulesCore", "HypergeometricFunctions", "InverseFunctions", "IrrationalConstants", "LogExpFunctions", "Reexport", "Rmath", "SpecialFunctions"]
+git-tree-sha1 = "5783b877201a82fc0014cbf381e7e6eb130473a4"
+uuid = "4c63d2b9-4356-54db-8cca-17b64c39e42c"
+version = "1.0.1"
 
 [[deps.Strided]]
 deps = ["LinearAlgebra", "TupleTools"]
@@ -1768,6 +1871,7 @@ version = "0.9.1+5"
 # ╠═68280143-6e88-4a2d-a8df-d514f3bf5d41
 # ╠═909214e2-0320-4ddf-b146-b9d2b793355e
 # ╠═5b77abfe-bda2-43ea-b748-e703640c01fa
+# ╠═8a462693-2f7f-4826-a594-c7ed80a1f732
 # ╠═0366deaa-7aea-49c9-90bd-340210475d6d
 # ╟─71beb874-da12-43dc-be47-5be439963ff2
 # ╠═85855c1e-229e-4f6e-9646-d77546fcbd6a
@@ -1781,5 +1885,14 @@ version = "0.9.1+5"
 # ╠═13c4089e-7d02-418b-b006-443f2912bbfe
 # ╠═cd75217a-d125-41bf-98b2-a890d6add5d7
 # ╠═cc2fa330-e318-46d3-9e8a-15f5138252ee
+# ╟─9950d5b4-d303-4d52-9cf5-50820f459b99
+# ╠═10fd8d8e-a27e-48dd-9db0-73bdb7b55607
+# ╠═2289f8cf-489c-4488-a61f-2b9d8ff28616
+# ╠═0840164f-fc0c-483d-92e7-92f12c98f6b5
+# ╠═94d5ee35-656b-4f6d-a5f1-cb6c321fc119
+# ╠═9326265c-4608-43a8-a67b-f658e177cf5e
+# ╠═6e5710b0-7d68-4e29-9c28-ec2c3393ed04
+# ╠═b8e340f5-4825-497c-949c-502af6fa9725
+# ╠═613f0088-5a5e-4023-9856-8747b0f28c2b
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
