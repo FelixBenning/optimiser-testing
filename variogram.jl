@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.22
+# v0.19.27
 
 using Markdown
 using InteractiveUtils
@@ -25,14 +25,14 @@ begin
 	using Statistics:Statistics
 end
 
+# ╔═╡ 6128dbd5-f554-4c41-a6c9-ef980c9d3b2c
+using Distributions: Distributions
+
 # ╔═╡ 909214e2-0320-4ddf-b146-b9d2b793355e
 begin
 	using Plots: plot, plot!
 	using Unzip: unzip
 end
-
-# ╔═╡ 6c708a17-4293-499a-88a2-368e29bb8f4d
-MNIST.download(i_accept_the_terms_of_use=true)
 
 # ╔═╡ e353dd27-a7a2-478b-a0e3-566aa035fe16
 begin
@@ -61,6 +61,38 @@ function mnistSimpleCNN7()
     )
 end
 
+# ╔═╡ 6a3229ef-5625-4665-bfc9-68dfb781709f
+mnistSimpleCNN7()
+
+# ╔═╡ c21d3b90-1ef4-4107-8110-8f8cb5316ff6
+function toy_model()
+	return Flux.Chain(
+		Flux.flatten,
+		Flux.Dense(foldl(*, size(x_train[:,:,1])), 10, bias=false)
+	)
+end
+
+# ╔═╡ c1ac778a-691a-4841-baaf-5bd1a6e99152
+struct EvalPoint
+	model
+	loss
+end
+
+# ╔═╡ bc4e67a8-eff4-4c6d-ba71-9c6890a0140b
+md"# Sampling Points"
+
+# ╔═╡ 18c85a07-f18e-4d73-8d56-6368b2ad6e4e
+md"## Heteroskedastic Random Points"
+
+# ╔═╡ 85bcf13d-293e-428b-848f-b19a696633ec
+@bind sample_points Slider(round.(Int64, 10 .^ (0:0.5:4)), show_value=true, default=10)
+
+# ╔═╡ cd8eaf17-0a86-4cde-bc81-6733c87cca8f
+
+
+# ╔═╡ 94173adc-912b-4cf2-ab5a-c15bc1605761
+md"## Random Grid Approach"
+
 # ╔═╡ 13058c7b-429a-4510-961a-4f31f81a43a0
 function normalize(model)
 	param_vec, restructure = Flux.destructure(model)
@@ -70,14 +102,6 @@ end
 # ╔═╡ 7dab6872-563c-46be-8be3-c62161965a42
 function carth_grid(dim=3; start=0, stop=5, length=11)
 	Iterators.product(fill(range(start, stop, length=length), dim)...)
-end
-
-# ╔═╡ c21d3b90-1ef4-4107-8110-8f8cb5316ff6
-function toy_model()
-	return Flux.Chain(
-		Flux.flatten,
-		Flux.Dense(foldl(*, size(x_train[:,:,1])), 10, bias=false)
-	)
 end
 
 # ╔═╡ 29c35dcf-8909-4895-90a4-6219ffb73b0f
@@ -91,27 +115,39 @@ function affine_linear_combination(origin, coefficients, models)
 	)
 end
 
-# ╔═╡ 7dc19271-119d-4f51-9d3f-b2ed910d7ca5
-pairs(x) = ( (a,b) for (k,a) in enumerate(x) for b in Iterators.drop(x, k) )
-
-# ╔═╡ c1ac778a-691a-4841-baaf-5bd1a6e99152
-struct EvalPoint
-	model
-	loss
-end
-
 # ╔═╡ f2b58a5d-1185-4845-9aef-623fb932f603
 function random_grid(model_factory, grid=carth_grid())
 	model = model_factory()
 	orthonormal_basis = [normalize(model_factory()) for _ in 1:length(size(grid))]
 	return map(grid) do coords
 		m = affine_linear_combination(model, coords, orthonormal_basis)
+		indices = rand(1:60000, 10)
 		return EvalPoint(
 			m,
-			Flux.Losses.mse(m(x_train[:,:,1:100]), y_train_oh[:,1:100])
+			Flux.Losses.mse(m(x_train[:,:,indices]), y_train_oh[:,indices])
 		)
 	end
 end
+
+# ╔═╡ 56d0ca64-469c-40d6-8816-3f5f1412e942
+# evaluations = random_grid(
+# 	mnistSimpleCNN7, 
+# 	carth_grid(2, start=0, stop=h_end/sqrt(2), length=11)
+# )
+
+# ╔═╡ 68280143-6e88-4a2d-a8df-d514f3bf5d41
+# begin
+# 	few_evals = first(evaluations, 100)
+# 	var_points = map(pairs(few_evals)) do (e1, e2)
+# 	    VarPoint(
+# 			norm(Flux.destructure(e1.model)[1] .- Flux.destructure(e2.model)[1]),
+# 			(e1.loss - e2.loss)^2
+# 		)
+# 	end
+# end
+
+# ╔═╡ 998b601a-0661-436e-8448-46fb9ee4e37b
+md"# Variogram"
 
 # ╔═╡ 5829a097-c073-47ee-a63f-f51fad6df4d2
 struct VarPoint
@@ -119,34 +155,83 @@ struct VarPoint
 	sqDiff::Float32
 end
 
+# ╔═╡ 7dc19271-119d-4f51-9d3f-b2ed910d7ca5
+pairs(x) = ( (a,b) for (k,a) in enumerate(x) for b in Iterators.drop(x, k) )
+
 # ╔═╡ 0366deaa-7aea-49c9-90bd-340210475d6d
-@bind h_end Slider(2:60, default=5, show_value=true)
-
-# ╔═╡ 56d0ca64-469c-40d6-8816-3f5f1412e942
-evaluations = random_grid(
-	mnistSimpleCNN7, 
-	carth_grid(2, start=0, stop=h_end/sqrt(2), length=11)
-)
-
-# ╔═╡ 68280143-6e88-4a2d-a8df-d514f3bf5d41
-begin
-	few_evals = first(evaluations, 100)
-	var_points = map(pairs(few_evals)) do (e1, e2)
-	    VarPoint(
-			norm(Flux.destructure(e1.model)[1] .- Flux.destructure(e2.model)[1]),
-			(e1.loss - e2.loss)^2
-		)
-	end
-end
-
-# ╔═╡ 5b77abfe-bda2-43ea-b748-e703640c01fa
-sort(vec(var_points), by= varPt->varPt.distance)
+@bind h_end Slider(2:250, default=5, show_value=true)
 
 # ╔═╡ 71beb874-da12-43dc-be47-5be439963ff2
 x_range = 0:0.1:h_end
 
 # ╔═╡ 85855c1e-229e-4f6e-9646-d77546fcbd6a
 @bind epsilon Slider(0:0.01:h_end/3, default=0.2, show_value=true)
+
+# ╔═╡ 7c15cb7a-e0d5-444a-ab3b-6f07a25966d5
+shape = 1
+
+# ╔═╡ a2062588-c621-460a-a3ae-a786454d5a89
+variances = rand(Distributions.Gamma(1/4, shape), (2,sample_points))
+
+# ╔═╡ ebdc747d-bcd6-4ad5-b3d8-0aa17773afcd
+plot(reshape(variances, :), seriestype=:hist)
+
+# ╔═╡ 724f4c0c-5597-433c-84f9-c620b8a2b80e
+function origin_variations(model_factory; model_origin=model_factory())
+	o_vec, restructure = Flux.destructure(model_origin)
+	radius = norm(o_vec)
+	print(radius)
+	return map(eachcol(variances)) do var
+		m_vec_1, _ = Flux.destructure(model_factory())
+		m_vec_2, _ = Flux.destructure(model_factory())
+		
+		m_1_param = o_vec .+ sqrt(var[1]) * m_vec_1
+		m_2_param = o_vec .+ sqrt(var[2]) * m_vec_2
+		m_1_param *= radius/norm(m_1_param)
+		m_2_param *= radius/norm(m_2_param)
+
+		
+		model_1 = restructure(m_1_param)
+		model_2 = restructure(m_2_param)
+
+		indices = rand(1:60000, 10)
+		loss_1 = Flux.Losses.mse(
+			model_1(x_train[:,:, indices]), y_train_oh[:,indices]
+		)
+		loss_2 = Flux.Losses.mse(
+			model_2(x_train[:,:, indices]), y_train_oh[:,indices]
+		)
+		
+		return VarPoint(
+			norm(m_1_param - m_2_param),
+			(loss_1 - loss_2)^2
+		)
+	end
+end
+
+# ╔═╡ 8326efbe-0e59-4110-b783-a9b3d12490e5
+var_points = origin_variations(mnistSimpleCNN7)
+
+# ╔═╡ d2bf125e-17ee-4bd2-8045-63d97486e503
+plot(map(varPt->varPt.distance, var_points), seriestype=:hist)
+
+# ╔═╡ 5b77abfe-bda2-43ea-b748-e703640c01fa
+sort(vec(var_points), by= varPt->varPt.distance)
+
+# ╔═╡ f63771a2-d7aa-46e1-bd15-078c8d9af6b6
+@bind shift Slider(0.001:0.001:1, show_value=true, default=0.6)
+
+# ╔═╡ 8ed50707-da1d-4954-8f1b-2c9a9394425d
+@bind exponent Slider(2:100, show_value=true, default=42)
+
+# ╔═╡ 6d0e564a-c0e7-4daa-8ddc-b95a5cac4afd
+@bind slope Slider(10e-5:10e-5:0.1, show_value=true, default=0.02)
+
+# ╔═╡ b8004005-1b89-45ea-889a-54ae8f6059b1
+shp = 1/400
+
+# ╔═╡ 05b2a3c9-e4af-41b2-b059-3a8468cc1109
+scl = 10e20
 
 # ╔═╡ 1d4f47bf-1d7b-4a89-8498-8761144173e0
 function emp_variogram(variation_points::Vector{VarPoint}, epsilon)
@@ -165,11 +250,18 @@ end
 begin
 	plt = plot(
 		unzip(map(pt-> (pt.distance, pt.sqDiff), vec(var_points))), 
-		st=:scatter, label=nothing
+		st=:scatter, label=nothing,# xlim=(29.0,30.25),# ylim=(0,10e-6),
+		# yaxis=:log, legend=:bottomright
 	)
 	plot!(plt, 
 		x_range, map(emp_variogram(var_points, epsilon), x_range), 
 		label="empirical variogram", lw=3)
+	# plot!(
+	# 	plt,
+	# 	x_range[2:end], (x->((slope *x + shift)^exponent)).(x_range[2:end]),
+	# 	linewidth=5,
+	# 	label="($(slope)x + $(shift))^$(exponent)"
+	# )
 end
 
 # ╔═╡ 4f545a7e-803d-4a18-b040-49437907925e
@@ -180,9 +272,12 @@ begin
 	end
 	
 	function (gv::sqExpVariogram)(h)
-		return gv.scale*(1-exp(-gv.shape*h^2))
+		return gv.scale*(1-exp(-gv.shape*h))
 	end
 end
+
+# ╔═╡ f31d9b3c-6702-4589-81cb-7899b595f677
+sqExpVariogram(shp,scl).(x_range)
 
 # ╔═╡ 38d65497-7af9-47bb-9aad-68d23a1bfe9a
 sqExpVariogram(1,2)(2)
@@ -217,6 +312,7 @@ Flux.params(sqExpVariogram(1,2))
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 MLDatasets = "eb30cadb-4394-5ae3-aed4-317e484a6458"
@@ -228,6 +324,7 @@ Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [compat]
 DataFrames = "~1.5.0"
+Distributions = "~0.25.87"
 Flux = "~0.13.13"
 MLDatasets = "~0.7.9"
 Plots = "~1.38.5"
@@ -242,7 +339,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.8.0"
 manifest_format = "2.0"
-project_hash = "4071ec34bea4d5c99b0dfe5b8a744df6af115a82"
+project_hash = "e6b83a9da556e2774d32915576173378a8d760cf"
 
 [[deps.AbstractFFTs]]
 deps = ["ChainRulesCore", "LinearAlgebra"]
@@ -359,15 +456,21 @@ version = "0.2.3+2"
 
 [[deps.CUDNN_jll]]
 deps = ["Artifacts", "CUDA_Runtime_jll", "JLLWrappers", "LazyArtifacts", "Libdl", "Pkg", "TOML"]
-git-tree-sha1 = "57011df4fce448828165e566af9befa2ea94350a"
+git-tree-sha1 = "aafe89dfde54011993c4029d3be3e037fd63db07"
 uuid = "62b44479-cb7b-5706-934f-f13b2eb2e645"
-version = "8.6.0+3"
+version = "8.6.0+5"
 
 [[deps.Cairo_jll]]
 deps = ["Artifacts", "Bzip2_jll", "CompilerSupportLibraries_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll", "JLLWrappers", "LZO_jll", "Libdl", "Pixman_jll", "Pkg", "Xorg_libXext_jll", "Xorg_libXrender_jll", "Zlib_jll", "libpng_jll"]
 git-tree-sha1 = "4b859a208b2397a7a623a03449e4636bdb17bcf2"
 uuid = "83423d85-b0ee-5818-9007-b63ccbeb887a"
 version = "1.16.1+1"
+
+[[deps.Calculus]]
+deps = ["LinearAlgebra"]
+git-tree-sha1 = "f641eb0a4f00c343bbc32346e1217b86f3ce9dad"
+uuid = "49dc2e85-a5d0-5ad3-a950-438e2897f1b9"
+version = "0.5.1"
 
 [[deps.ChainRules]]
 deps = ["Adapt", "ChainRulesCore", "Compat", "Distributed", "GPUArraysCore", "IrrationalConstants", "LinearAlgebra", "Random", "RealDot", "SparseArrays", "Statistics", "StructArrays"]
@@ -514,6 +617,12 @@ version = "0.1.2"
 deps = ["Mmap"]
 uuid = "8bb1440f-4735-579b-a4ab-409b98df4dab"
 
+[[deps.DensityInterface]]
+deps = ["InverseFunctions", "Test"]
+git-tree-sha1 = "80c3e8639e3353e5d2912fb3a1916b8455e2494b"
+uuid = "b429d917-457f-4dbc-8f4c-0cc954292b1d"
+version = "0.4.0"
+
 [[deps.DiffResults]]
 deps = ["StaticArraysCore"]
 git-tree-sha1 = "782dd5f4561f5d267313f23853baaaa4c52ea621"
@@ -530,6 +639,12 @@ version = "1.12.2"
 deps = ["Random", "Serialization", "Sockets"]
 uuid = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 
+[[deps.Distributions]]
+deps = ["ChainRulesCore", "DensityInterface", "FillArrays", "LinearAlgebra", "PDMats", "Printf", "QuadGK", "Random", "SparseArrays", "SpecialFunctions", "Statistics", "StatsBase", "StatsFuns", "Test"]
+git-tree-sha1 = "13027f188d26206b9e7b863036f87d2f2e7d013a"
+uuid = "31c24e10-a181-5473-b8eb-7969acd0382f"
+version = "0.25.87"
+
 [[deps.DocStringExtensions]]
 deps = ["LibGit2"]
 git-tree-sha1 = "2fb1e02f2b635d0845df5d7c167fec4dd739b00d"
@@ -540,6 +655,12 @@ version = "0.9.3"
 deps = ["ArgTools", "FileWatching", "LibCURL", "NetworkOptions"]
 uuid = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
 version = "1.6.0"
+
+[[deps.DualNumbers]]
+deps = ["Calculus", "NaNMath", "SpecialFunctions"]
+git-tree-sha1 = "5837a837389fccf076445fce071c8ddaea35a566"
+uuid = "fa6b7ba4-c1ee-5f82-b5fc-ecf0adba8f74"
+version = "0.6.8"
 
 [[deps.Expat_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -759,6 +880,12 @@ deps = ["Artifacts", "Cairo_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll",
 git-tree-sha1 = "129acf094d168394e80ee1dc4bc06ec835e510a3"
 uuid = "2e76f6c2-a576-52d4-95c1-20adfe4de566"
 version = "2.8.1+1"
+
+[[deps.HypergeometricFunctions]]
+deps = ["DualNumbers", "LinearAlgebra", "OpenLibm_jll", "SpecialFunctions"]
+git-tree-sha1 = "432b5b03176f8182bd6841fbfc42c718506a2d5f"
+uuid = "34004b35-14d8-5ef3-9330-4cdb6864b03a"
+version = "0.3.15"
 
 [[deps.Hyperscript]]
 deps = ["Test"]
@@ -1216,6 +1343,12 @@ deps = ["Artifacts", "Libdl"]
 uuid = "efcefdf7-47ab-520b-bdef-62a2eaa19f15"
 version = "10.40.0+0"
 
+[[deps.PDMats]]
+deps = ["LinearAlgebra", "SparseArrays", "SuiteSparse"]
+git-tree-sha1 = "67eae2738d63117a196f497d7db789821bce61d1"
+uuid = "90014a1f-27ba-587c-ab20-58faa44d9150"
+version = "0.11.17"
+
 [[deps.PaddedViews]]
 deps = ["OffsetArrays"]
 git-tree-sha1 = "03a7a85b76381a3d04c7a1656039197e70eda03d"
@@ -1313,6 +1446,12 @@ git-tree-sha1 = "0c03844e2231e12fda4d0086fd7cbe4098ee8dc5"
 uuid = "ea2cea3b-5b76-57ae-a6ef-0a8af62496e1"
 version = "5.15.3+2"
 
+[[deps.QuadGK]]
+deps = ["DataStructures", "LinearAlgebra"]
+git-tree-sha1 = "6ec7ac8412e83d57e313393220879ede1740f9ee"
+uuid = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
+version = "2.8.2"
+
 [[deps.REPL]]
 deps = ["InteractiveUtils", "Markdown", "Sockets", "Unicode"]
 uuid = "3fa0cd96-eef1-5676-8a61-b3b8758bbffb"
@@ -1367,6 +1506,18 @@ deps = ["UUIDs"]
 git-tree-sha1 = "838a3a4188e2ded87a4f9f184b4b0d78a1e91cb7"
 uuid = "ae029012-a4dd-5104-9daa-d747884805df"
 version = "1.3.0"
+
+[[deps.Rmath]]
+deps = ["Random", "Rmath_jll"]
+git-tree-sha1 = "f65dcb5fa46aee0cf9ed6274ccbd597adc49aa7b"
+uuid = "79098fc4-a85e-5d69-aa6a-4863f24498fa"
+version = "0.7.1"
+
+[[deps.Rmath_jll]]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
+git-tree-sha1 = "6ed52fdd3382cf21947b15e8870ac0ddbff736da"
+uuid = "f50d1b31-88e8-58de-be2c-1cc44531875f"
+version = "0.4.0+0"
 
 [[deps.SHA]]
 uuid = "ea8e919c-243c-51af-8825-aaa63cd721ce"
@@ -1479,6 +1630,12 @@ git-tree-sha1 = "d1bf48bfcc554a3761a133fe3a9bb01488e06916"
 uuid = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 version = "0.33.21"
 
+[[deps.StatsFuns]]
+deps = ["ChainRulesCore", "HypergeometricFunctions", "InverseFunctions", "IrrationalConstants", "LogExpFunctions", "Reexport", "Rmath", "SpecialFunctions"]
+git-tree-sha1 = "f625d686d5a88bcd2b15cd81f18f98186fdc0c9a"
+uuid = "4c63d2b9-4356-54db-8cca-17b64c39e42c"
+version = "1.3.0"
+
 [[deps.Strided]]
 deps = ["LinearAlgebra", "TupleTools"]
 git-tree-sha1 = "a7a664c91104329c88222aa20264e1a05b6ad138"
@@ -1507,6 +1664,10 @@ deps = ["Dates", "UUIDs"]
 git-tree-sha1 = "ca4bccb03acf9faaf4137a9abc1881ed1841aa70"
 uuid = "856f2bd8-1eba-4b0a-8007-ebc267875bd4"
 version = "1.10.0"
+
+[[deps.SuiteSparse]]
+deps = ["Libdl", "LinearAlgebra", "Serialization", "SparseArrays"]
+uuid = "4607b0f0-06f3-5cda-b6b1-a6196a1729e9"
 
 [[deps.TOML]]
 deps = ["Dates"]
@@ -1859,25 +2020,44 @@ version = "1.4.1+0"
 
 # ╔═╡ Cell order:
 # ╠═6fb3abe0-db63-11ec-3d8b-696b950d494b
-# ╟─6c708a17-4293-499a-88a2-368e29bb8f4d
 # ╠═e353dd27-a7a2-478b-a0e3-566aa035fe16
 # ╠═82de1985-98c8-4e3e-b424-b490c4b75bf6
+# ╠═6a3229ef-5625-4665-bfc9-68dfb781709f
+# ╠═c21d3b90-1ef4-4107-8110-8f8cb5316ff6
+# ╠═c1ac778a-691a-4841-baaf-5bd1a6e99152
+# ╟─bc4e67a8-eff4-4c6d-ba71-9c6890a0140b
+# ╟─18c85a07-f18e-4d73-8d56-6368b2ad6e4e
+# ╠═6128dbd5-f554-4c41-a6c9-ef980c9d3b2c
+# ╠═85bcf13d-293e-428b-848f-b19a696633ec
+# ╠═a2062588-c621-460a-a3ae-a786454d5a89
+# ╠═ebdc747d-bcd6-4ad5-b3d8-0aa17773afcd
+# ╠═cd8eaf17-0a86-4cde-bc81-6733c87cca8f
+# ╠═724f4c0c-5597-433c-84f9-c620b8a2b80e
+# ╠═8326efbe-0e59-4110-b783-a9b3d12490e5
+# ╟─94173adc-912b-4cf2-ab5a-c15bc1605761
 # ╠═13058c7b-429a-4510-961a-4f31f81a43a0
 # ╟─7dab6872-563c-46be-8be3-c62161965a42
-# ╟─c21d3b90-1ef4-4107-8110-8f8cb5316ff6
 # ╠═29c35dcf-8909-4895-90a4-6219ffb73b0f
-# ╟─7dc19271-119d-4f51-9d3f-b2ed910d7ca5
-# ╠═c1ac778a-691a-4841-baaf-5bd1a6e99152
 # ╠═f2b58a5d-1185-4845-9aef-623fb932f603
 # ╠═56d0ca64-469c-40d6-8816-3f5f1412e942
-# ╠═5829a097-c073-47ee-a63f-f51fad6df4d2
 # ╠═68280143-6e88-4a2d-a8df-d514f3bf5d41
+# ╟─998b601a-0661-436e-8448-46fb9ee4e37b
+# ╠═5829a097-c073-47ee-a63f-f51fad6df4d2
+# ╟─7dc19271-119d-4f51-9d3f-b2ed910d7ca5
 # ╠═909214e2-0320-4ddf-b146-b9d2b793355e
+# ╠═d2bf125e-17ee-4bd2-8045-63d97486e503
 # ╠═5b77abfe-bda2-43ea-b748-e703640c01fa
 # ╠═0366deaa-7aea-49c9-90bd-340210475d6d
 # ╟─71beb874-da12-43dc-be47-5be439963ff2
 # ╠═85855c1e-229e-4f6e-9646-d77546fcbd6a
+# ╠═7c15cb7a-e0d5-444a-ab3b-6f07a25966d5
 # ╠═446e1720-f4d5-47ad-8df5-d49ec4921401
+# ╠═f63771a2-d7aa-46e1-bd15-078c8d9af6b6
+# ╠═8ed50707-da1d-4954-8f1b-2c9a9394425d
+# ╠═6d0e564a-c0e7-4daa-8ddc-b95a5cac4afd
+# ╠═f31d9b3c-6702-4589-81cb-7899b595f677
+# ╠═b8004005-1b89-45ea-889a-54ae8f6059b1
+# ╠═05b2a3c9-e4af-41b2-b059-3a8468cc1109
 # ╟─1d4f47bf-1d7b-4a89-8498-8761144173e0
 # ╠═4f545a7e-803d-4a18-b040-49437907925e
 # ╠═38d65497-7af9-47bb-9aad-68d23a1bfe9a
